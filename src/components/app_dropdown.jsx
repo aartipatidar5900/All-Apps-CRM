@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { LayoutGrid, ChevronDown, Check } from "lucide-react";
-import appData from "../../backend/config/app_id.json";
+import appData from "../../backend/config/all_apps.json";
 
 // Formats app names like "Discount_Ninja" to "Discount Ninja"
 const formatAppName = (key) => key.replace(/_/g, " ");
