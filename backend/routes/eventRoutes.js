@@ -1,0 +1,26 @@
+import express from 'express';
+import {
+  getPassonextEvents,
+  getDiscountNinjaEvents,
+  getCheckoutExtensionsEvents,
+  getNojiroEvents,
+  getPostPurchaseEvents,
+  getCountryBlockerEvents,
+  getOrderEditingEvents,
+  getFormBuilderEvents,
+} from '../controllers/eventController.js';
+
+const router = express.Router();
+
+// Dedicated routes for each individual app in all_apps.json
+router.get('/passonext', getPassonextEvents);
+router.get('/discount-ninja', getDiscountNinjaEvents);
+router.get('/checkout-extensions', getCheckoutExtensionsEvents);
+router.get('/nojiro', getNojiroEvents);
+router.get('/post-purchase', getPostPurchaseEvents);
+router.get('/country-blocker', getCountryBlockerEvents);
+router.get('/order-editing', getOrderEditingEvents);
+router.get('/form-builder', getFormBuilderEvents);
+
+export default router;
+
