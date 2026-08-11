@@ -1,5 +1,6 @@
 import express from 'express';
 import {
+  getAppEventsByName,
   getPassonextEvents,
   getDiscountNinjaEvents,
   getCheckoutExtensionsEvents,
@@ -21,6 +22,9 @@ router.get('/post-purchase', getPostPurchaseEvents);
 router.get('/country-blocker', getCountryBlockerEvents);
 router.get('/order-editing', getOrderEditingEvents);
 router.get('/form-builder', getFormBuilderEvents);
+
+// Generic dynamic app route
+router.get('/:appName', getAppEventsByName);
 
 export default router;
 

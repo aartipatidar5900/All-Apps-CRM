@@ -1,103 +1,64 @@
+import { useState, useEffect } from "react";
 import { DollarSign, Calendar } from "lucide-react";
 import Metric_Card from "../components/matric_card";
 
-const getAppMetrics = (appName) => {
-  const metricsData = {
-    Passonext: {
-      totalRevenue: "$72,944.27",
-      weeklyInstalls: "62",
-      totalStores: "8,582",
-      installs: "7,563",
-      uninstalls: "6,190",
-      planActivated: "391",
-      planExpired: "84",
-      planUnfrozen: "21",
-      planDeclined: "12",
-    },
-    Discount_Ninja: {
-      totalRevenue: "$45,210.50",
-      weeklyInstalls: "48",
-      totalStores: "5,320",
-      installs: "4,890",
-      uninstalls: "3,410",
-      planActivated: "275",
-      planExpired: "52",
-      planUnfrozen: "14",
-      planDeclined: "8",
-    },
-    Checkout_Extensions: {
-      totalRevenue: "$98,400.00",
-      weeklyInstalls: "85",
-      totalStores: "11,240",
-      installs: "10,150",
-      uninstalls: "7,820",
-      planActivated: "512",
-      planExpired: "110",
-      planUnfrozen: "33",
-      planDeclined: "19",
-    },
-    Nojiro: {
-      totalRevenue: "$18,650.00",
-      weeklyInstalls: "22",
-      totalStores: "2,150",
-      installs: "1,980",
-      uninstalls: "1,420",
-      planActivated: "105",
-      planExpired: "28",
-      planUnfrozen: "7",
-      planDeclined: "4",
-    },
-    Post_purchase: {
-      totalRevenue: "$34,120.75",
-      weeklyInstalls: "39",
-      totalStores: "4,210",
-      installs: "3,840",
-      uninstalls: "2,950",
-      planActivated: "198",
-      planExpired: "41",
-      planUnfrozen: "11",
-      planDeclined: "6",
-    },
-    Country_Blocker: {
-      totalRevenue: "$14,890.00",
-      weeklyInstalls: "18",
-      totalStores: "1,890",
-      installs: "1,720",
-      uninstalls: "1,180",
-      planActivated: "88",
-      planExpired: "22",
-      planUnfrozen: "5",
-      planDeclined: "3",
-    },
-    Order_editing: {
-      totalRevenue: "$52,800.00",
-      weeklyInstalls: "54",
-      totalStores: "6,480",
-      installs: "5,820",
-      uninstalls: "4,310",
-      planActivated: "310",
-      planExpired: "65",
-      planUnfrozen: "18",
-      planDeclined: "10",
-    },
-    Form_Builder: {
-      totalRevenue: "$28,450.25",
-      weeklyInstalls: "31",
-      totalStores: "3,450",
-      installs: "3,120",
-      uninstalls: "2,280",
-      planActivated: "162",
-      planExpired: "35",
-      planUnfrozen: "9",
-      planDeclined: "5",
-    },
-  };
-
-  return metricsData[appName] || metricsData.Passonext;
-};
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export function Overview({ selectedApp = "Passonext" }) {
-  const metrics = getAppMetrics(selectedApp);
+  const [metrics, setMetrics] = useState({
+    totalRevenue: "$0.00",
+    weeklyInstalls: "0",
+    totalStores: "0",
+    installs: "0",
+    uninstalls: "0",
+    planActivated: "0",
+    planExpired: "0",
+    planUnfrozen: "0",
+    planDeclined: "0",
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchMetrics() {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/api/events/${encodeURIComponent(selectedApp)}`
+        );
+        if (!response.ok) {
+          throw new Error(`Failed to fetch app data: ${response.statusText}`);
+        }
+        const json = await response.json();
+        if (json.success && json.data && json.data.metrics) {
+          if (isMounted) {
+            setMetrics(json.data.metrics);
+          }
+        } else {
+          throw new Error(json.error || "Failed to load metrics.");
+        }
+      } catch (err) {
+        console.error(`Error fetching metrics for ${selectedApp}:`, err);
+        if (isMounted) {
+          setError(err.message);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    }
+
+    if (selectedApp) {
+      fetchMetrics();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedApp]);
 
   const cards = [
     {
@@ -142,6 +103,12 @@ export function Overview({ selectedApp = "Passonext" }) {
 
   return (
     <div className="p-6 md:p-8 space-y-8 max-w-7xl mx-auto">
+      {error && (
+        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm">
+          <span className="font-semibold">Failed to load live metrics: </span>
+          {error}
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {cards.map((card, index) => (
           <Metric_Card
@@ -149,6 +116,7 @@ export function Overview({ selectedApp = "Passonext" }) {
             title={card.title}
             value={card.value}
             icon={card.icon}
+            isLoading={loading}
           />
         ))}
       </div>

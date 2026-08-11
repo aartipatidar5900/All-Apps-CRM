@@ -64,7 +64,14 @@ async function getFormBuilderEvents(req, res) {
   await handleSingleAppEvents('Form_Builder', req, res);
 }
 
+// Generic dynamic app handler
+async function getAppEventsByName(req, res) {
+  const { appName } = req.params;
+  await handleSingleAppEvents(appName, req, res);
+}
+
 export {
+  getAppEventsByName,
   getPassonextEvents,
   getDiscountNinjaEvents,
   getCheckoutExtensionsEvents,
