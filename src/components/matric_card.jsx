@@ -31,7 +31,7 @@ const Metric_Card = ({
           : onClick
             ? "cursor-pointer hover:-translate-y-0.5"
             : ""
-      } ${isActive && !loading ? "border-2 border-zinc-400 ring-2 ring-zinc-100 shadow-md transform -translate-y-1" : "border border-zinc-200/80 hover:shadow-xs"}`}
+      } ${isActive && !loading ? "border-2 border-slate-700 ring-2 ring-slate-100 shadow-md transform -translate-y-0.5" : "border border-zinc-200/80 hover:shadow-xs"}`}
     >
       <div className="flex justify-between items-start">
         <div className="w-full">

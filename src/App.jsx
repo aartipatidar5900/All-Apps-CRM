@@ -142,6 +142,13 @@ function App() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
+  const handleSelectApp = (app) => {
+    setSelectedApp(app);
+    setDatePreset("all");
+    setStartDate("");
+    setEndDate("");
+  };
+
   const handleDateFilterChange = ({
     preset,
     startDate: start,
@@ -160,7 +167,7 @@ function App() {
           <NavigationBar
             totalCount={totalStoresCount}
             selectedApp={selectedApp}
-            onSelectApp={setSelectedApp}
+            onSelectApp={handleSelectApp}
             datePreset={datePreset}
             startDate={startDate}
             endDate={endDate}
@@ -171,7 +178,7 @@ function App() {
               <Route path="/" element={<Navigate to="/overview" replace />} />
               <Route
                 path="/overview"
-                element={<Overview selectedApp={selectedApp} />}
+                element={<Overview selectedApp={selectedApp} startDate={startDate} endDate={endDate} />}
               />
               <Route
                 path="/all_stores"
