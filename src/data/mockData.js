@@ -10,6 +10,7 @@ export const mockDiscounts = [
     onboardingStatus: true,
     createdAt: "2026-01-15T08:30:00.000Z",
     updatedAt: "2026-02-01T10:15:00.000Z",
+    plan: "Basic - $8.00 Usd",
     pastEvents: [
       { eventName: "Installed", timestamp: "2026-01-15T08:30:00.000Z" }
     ],
@@ -43,6 +44,7 @@ export const mockDiscounts = [
     onboardingStatus: true,
     createdAt: "2026-01-20T14:00:00.000Z",
     updatedAt: "2026-02-03T16:20:00.000Z",
+    plan: "1500+ Customers - $9.99",
     pastEvents: [
       { eventName: "Installed", timestamp: "2026-01-20T14:00:00.000Z" }
     ],
@@ -68,6 +70,7 @@ export const mockDiscounts = [
     onboardingStatus: false,
     createdAt: "2026-02-01T09:12:00.000Z",
     updatedAt: "2026-02-05T12:00:00.000Z",
+    plan: "No Plan",
     pastEvents: [
       { eventName: "Installed", timestamp: "2026-02-01T09:12:00.000Z" },
       { eventName: "Uninstalled", timestamp: "2026-02-05T12:00:00.000Z" }
@@ -85,6 +88,7 @@ export const mockDiscounts = [
     onboardingStatus: true,
     createdAt: "2026-02-02T11:45:00.000Z",
     updatedAt: "2026-02-06T15:30:00.000Z",
+    plan: "Trial",
     pastEvents: [
       { eventName: "Installed", timestamp: "2026-02-02T11:45:00.000Z" }
     ],
@@ -110,6 +114,7 @@ export const mockDiscounts = [
     onboardingStatus: false,
     createdAt: "2026-02-04T10:00:00.000Z",
     updatedAt: "2026-02-07T08:00:00.000Z",
+    plan: "No Plan",
     pastEvents: [
       { eventName: "Installed", timestamp: "2026-02-04T10:00:00.000Z" },
       { eventName: "Closed", timestamp: "2026-02-07T08:00:00.000Z" }

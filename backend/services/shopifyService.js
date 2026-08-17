@@ -103,6 +103,35 @@ async function fetchAllAppEvents(appApiKey, dateFilter = {}) {
   const allUniqueShops = new Set();
 
   const sortedEvents = [...filteredEvents].sort((a, b) => new Date(a.occurredAt) - new Date(b.occurredAt));
+
+  // Group sortedEvents by shop to determine chronological sequence per shop
+  const shopEventsMap = {};
+  for (const event of sortedEvents) {
+    const shopId = event.shop?.id || event.shop?.myshopifyDomain || 'unknown';
+    if (shopId !== 'unknown') {
+      if (!shopEventsMap[shopId]) {
+        shopEventsMap[shopId] = [];
+      }
+      shopEventsMap[shopId].push(event);
+    }
+  }
+
+  // Check last event for each shop
+  for (const shopId in shopEventsMap) {
+    const events = shopEventsMap[shopId];
+    if (events.length > 0) {
+      const lastEvent = events[events.length - 1];
+      if (lastEvent.type === 'SUBSCRIPTION_CHARGE_CANCELED') {
+        const previousEvent = events.length > 1 ? events[events.length - 2] : null;
+        if (previousEvent && previousEvent.type === 'RELATIONSHIP_UNINSTALLED') {
+          lastEvent.type = 'RELATIONSHIP_UNINSTALLED';
+        } else {
+          lastEvent.type = 'RELATIONSHIP_INSTALLED';
+        }
+      }
+    }
+  }
+
   const shopCurrentStatus = {};
 
   for (const event of sortedEvents) {
@@ -179,6 +208,7 @@ async function fetchAllAppEvents(appApiKey, dateFilter = {}) {
         uninstalls: 0,
         planActivated: 0,
         planExpired: 0,
+        planCanceled: 0,
         planUnfrozen: 0,
         planDeclined: 0,
         totalStores: 0,
@@ -200,8 +230,11 @@ async function fetchAllAppEvents(appApiKey, dateFilter = {}) {
       monthlyShopTracker[shopId] = 'INACTIVE';
     } else if (type === 'SUBSCRIPTION_CHARGE_ACTIVATED' || type === 'ONE_TIME_CHARGE_ACTIVATED') {
       m.planActivated += 1;
-    } else if (type === 'SUBSCRIPTION_CHARGE_EXPIRED' || type === 'ONE_TIME_CHARGE_EXPIRED' || type === 'SUBSCRIPTION_CHARGE_CANCELED') {
+    } else if (type === 'SUBSCRIPTION_CHARGE_EXPIRED' || type === 'ONE_TIME_CHARGE_EXPIRED') {
       m.planExpired += 1;
+      console.log(`[Plan Expired] Type: ${type} | Shop: ${event.shop?.myshopifyDomain || shopId} | Date: ${event.occurredAt} | Month: ${monthLabel}`);
+    } else if (type === 'SUBSCRIPTION_CHARGE_CANCELED') {
+      m.planCanceled += 1;
     } else if (type === 'SUBSCRIPTION_CHARGE_UNFROZEN') {
       m.planUnfrozen += 1;
     } else if (type === 'SUBSCRIPTION_CHARGE_DECLINED') {
@@ -221,6 +254,171 @@ async function fetchAllAppEvents(appApiKey, dateFilter = {}) {
   // Sort months in descending order (latest month first: Aug 2026, Jul 2026...) as shown in UI mockups
   const monthlyTrends = Object.values(monthsMap).sort((a, b) => b.key.localeCompare(a.key));
 
+  // Extract unique stores/merchants with their activity history
+  const storeMap = {};
+  for (const event of sortedEvents) {
+    const shopId = event.shop?.id || event.shop?.myshopifyDomain || 'unknown';
+    const domain = event.shop?.myshopifyDomain || (shopId !== 'unknown' ? shopId.replace('gid://partners/Shop/', '') + '.myshopify.com' : 'unknown.myshopify.com');
+
+    if (!storeMap[domain]) {
+      const cleanName = domain.replace('.myshopify.com', '');
+      storeMap[domain] = {
+        _id: shopId,
+        storeDomain: domain,
+        ownerName: cleanName,
+        storeEmail: `contact@${cleanName}.com`,
+        isActive: false,
+        isStoreClosed: false,
+        onboardingStatus: true,
+        createdAt: event.occurredAt,
+        updatedAt: event.occurredAt,
+        pastEvents: [],
+        discounts: [],
+      };
+    }
+
+    const store = storeMap[domain];
+
+    let eventLabel = event.type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (l) => l.toUpperCase());
+    if (event.type === 'RELATIONSHIP_INSTALLED') eventLabel = 'Installed';
+    else if (event.type === 'RELATIONSHIP_UNINSTALLED') eventLabel = 'Uninstalled';
+    else if (event.type === 'RELATIONSHIP_REACTIVATED') eventLabel = 'Reopened';
+    else if (event.type === 'RELATIONSHIP_DEACTIVATED') eventLabel = 'Store Closed';
+
+    store.pastEvents.push({
+      eventName: eventLabel,
+      type: event.type,
+      timestamp: event.occurredAt,
+    });
+
+    if (new Date(event.occurredAt) < new Date(store.createdAt)) {
+      store.createdAt = event.occurredAt;
+    }
+    if (new Date(event.occurredAt) >= new Date(store.updatedAt)) {
+      store.updatedAt = event.occurredAt;
+      if (event.type === 'RELATIONSHIP_INSTALLED' || event.type === 'RELATIONSHIP_REACTIVATED') {
+        store.isActive = true;
+        store.isStoreClosed = false;
+      } else if (event.type === 'RELATIONSHIP_UNINSTALLED') {
+        store.isActive = false;
+        store.isStoreClosed = false;
+      } else if (event.type === 'RELATIONSHIP_DEACTIVATED') {
+        store.isActive = false;
+        store.isStoreClosed = true;
+      }
+    }
+  }
+
+  const storesList = Object.values(storeMap).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+  const APP_TRIAL_DAYS = {
+    // Registered App Names (Normalized)
+    'passonext': 0,
+    'discountninjamt': 14,
+    'checkoutextensions': 14,
+    'nojiro': 7,
+    'postpurchaseupsells': 0,
+    'countryblockermt': 7,
+    'ordereditingmt': 7,
+    'formbuildermt': 7,
+    // Fallback Names (Normalized)
+    'discountninja': 14,
+    'postpurchase': 0,
+    'countryblocker': 7,
+    'orderediting': 7,
+    'formbuilder': 7,
+    // App IDs
+    '324875091969': 0, // passonext
+    '384644448257': 14, // Discount_Ninja
+    '39760756737': 14, // Checkout_Extensions
+    '22523510785': 7, // Nojiro
+    '368562929665': 0, // Post_purchase
+    '374494232577': 7, // Country_Blocker
+    '345764200449': 7, // Order_editing
+    '377463177217': 7, // Form_Builder
+  };
+
+  function getStorePlanFromEvents(events, appKey) {
+    let currentPlan = 'No Plan';
+    const normalizedKey = appKey ? String(appKey).toLowerCase().replace(/[-_\s]/g, '') : '';
+    const trialDays = APP_TRIAL_DAYS[normalizedKey] ?? 14;
+
+    const earliestInstallEvent = events.find(e => e.type === 'RELATIONSHIP_INSTALLED' || e.type === 'RELATIONSHIP_REACTIVATED');
+    const earliestInstallDate = earliestInstallEvent ? new Date(earliestInstallEvent.occurredAt) : null;
+
+    for (const event of events) {
+      const type = event.type;
+      if (
+        type === 'SUBSCRIPTION_CHARGE_ACTIVATED' ||
+        type === 'ONE_TIME_CHARGE_ACTIVATED' ||
+        type === 'SUBSCRIPTION_CHARGE_UNFROZEN' ||
+        type === 'SUBSCRIPTION_CHARGE_ACCEPTED'
+      ) {
+        if (event.charge) {
+          const rawName = event.charge.name || 'Plan';
+          const cleanName = rawName
+            .replace(/_/g, ' ')
+            .replace(/-/g, ' ')
+            .toLowerCase()
+            .replace(/\b\w/g, (l) => l.toUpperCase());
+          const amountVal = event.charge.amount?.amount ? parseFloat(event.charge.amount.amount) : 0;
+          currentPlan = `${cleanName} ($${amountVal})`;
+        } else {
+          if (trialDays > 0 && earliestInstallDate) {
+            const eventDate = new Date(event.occurredAt);
+            const diffDays = (eventDate - earliestInstallDate) / (1000 * 60 * 60 * 24);
+            if (diffDays <= trialDays) {
+              currentPlan = 'Trial';
+            } else {
+              currentPlan = 'No Plan';
+            }
+          } else {
+            currentPlan = 'No Plan';
+          }
+        }
+      }
+
+      if (
+        type === 'SUBSCRIPTION_CHARGE_CANCELED' ||
+        type === 'SUBSCRIPTION_CHARGE_EXPIRED' ||
+        type === 'ONE_TIME_CHARGE_EXPIRED' ||
+        type === 'RELATIONSHIP_UNINSTALLED' ||
+        type === 'RELATIONSHIP_DEACTIVATED'
+      ) {
+        currentPlan = 'No Plan';
+      }
+
+      if (type === 'RELATIONSHIP_INSTALLED' || type === 'RELATIONSHIP_REACTIVATED') {
+        if (trialDays > 0 && earliestInstallDate) {
+          const eventDate = new Date(event.occurredAt);
+          const diffDays = (eventDate - earliestInstallDate) / (1000 * 60 * 60 * 24);
+          if (diffDays <= trialDays) {
+            currentPlan = 'Trial';
+          } else {
+            currentPlan = 'No Plan';
+          }
+        } else {
+          currentPlan = 'No Plan';
+        }
+      }
+    }
+
+    if (currentPlan === 'Trial' && earliestInstallDate) {
+      const diffDays = (new Date() - earliestInstallDate) / (1000 * 60 * 60 * 24);
+      if (diffDays > trialDays) {
+        currentPlan = 'No Plan';
+      }
+    }
+
+    return currentPlan;
+  }
+
+  for (const store of storesList) {
+    const shopId = store._id || 'unknown';
+    const events = shopEventsMap[shopId] || [];
+    store.plan = getStorePlanFromEvents(events, appName || appApiKey);
+  }
+
   const metrics = {
     totalRevenue: formattedRevenue,
     weeklyInstalls: weeklyInstallsCount.toLocaleString(),
@@ -229,15 +427,19 @@ async function fetchAllAppEvents(appApiKey, dateFilter = {}) {
     uninstalls: (eventCounts.RELATIONSHIP_UNINSTALLED || 0).toLocaleString(),
     planActivated: activatedCharges.toLocaleString(),
     planExpired: ((eventCounts.SUBSCRIPTION_CHARGE_EXPIRED || 0) + (eventCounts.ONE_TIME_CHARGE_EXPIRED || 0)).toLocaleString(),
+    planCanceled: (eventCounts.SUBSCRIPTION_CHARGE_CANCELED || 0).toLocaleString(),
     planUnfrozen: (eventCounts.SUBSCRIPTION_CHARGE_UNFROZEN || 0).toLocaleString(),
     planDeclined: (eventCounts.SUBSCRIPTION_CHARGE_DECLINED || 0).toLocaleString(),
   };
+
+  console.log(`\n[${appName}] Plan Expired Summary: ${metrics.planExpired} total (SUBSCRIPTION_CHARGE_EXPIRED: ${eventCounts.SUBSCRIPTION_CHARGE_EXPIRED || 0}, ONE_TIME_CHARGE_EXPIRED: ${eventCounts.ONE_TIME_CHARGE_EXPIRED || 0}, SUBSCRIPTION_CHARGE_CANCELED: ${eventCounts.SUBSCRIPTION_CHARGE_CANCELED || 0})\n`);
 
   return {
     appName,
     appId: appApiKey,
     totalEventsCount: totalCount,
     metrics,
+    stores: storesList,
     eventCounts: {
       relationshipInstalled: eventCounts.RELATIONSHIP_INSTALLED || 0,
       relationshipUninstalled: eventCounts.RELATIONSHIP_UNINSTALLED || 0,

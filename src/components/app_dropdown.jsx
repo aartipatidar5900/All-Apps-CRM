@@ -55,7 +55,7 @@ export default function AppDropdown({
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="px-3 py-2 text-xs font-semibold rounded-xl border transition-all flex items-center gap-2 shadow-2xs bg-slate-900 text-white border-slate-900 hover:bg-slate-800"
+        className="px-3 py-2 text-xs font-semibold rounded-xl border transition-all flex items-center gap-2 shadow-2xs bg-slate-900 text-white border-slate-900 hover:bg-slate-800 cursor-pointer"
         title="App Filter"
       >
         <LayoutGrid className="w-3.5 h-3.5 text-white" />
@@ -70,7 +70,7 @@ export default function AppDropdown({
             <button
               type="button"
               onClick={() => handleSelect("")}
-              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl font-semibold text-xs transition-colors ${
+              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl font-semibold text-xs transition-colors cursor-pointer ${
                 !selectedApp
                   ? "bg-slate-900 text-white font-bold"
                   : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
@@ -88,7 +88,7 @@ export default function AppDropdown({
                 key={app.id}
                 type="button"
                 onClick={() => handleSelect(app.name)}
-                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl font-semibold text-xs transition-colors ${
+                className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl font-semibold text-xs transition-colors cursor-pointer ${
                   isSelected
                     ? "bg-slate-900 text-white font-bold"
                     : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"

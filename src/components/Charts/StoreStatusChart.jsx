@@ -60,8 +60,9 @@ const StoreStatusChart = ({ data, loading, error }) => {
         {
           name: 'Installed Stores',
           type: 'bar',
-          barGap: '20%',
-          barMaxWidth: 28,
+          barGap: '0%',
+          barCategoryGap: '35%',
+          barMaxWidth: 32,
           itemStyle: {
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
               { offset: 0, color: '#10b981' },
@@ -74,7 +75,8 @@ const StoreStatusChart = ({ data, loading, error }) => {
         {
           name: 'Uninstalled Stores',
           type: 'bar',
-          barMaxWidth: 28,
+          barMaxWidth: 32,
+          barCategoryGap: '35%',
           itemStyle: {
             color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
               { offset: 0, color: '#f43f5e' },

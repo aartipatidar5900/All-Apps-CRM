@@ -64,7 +64,7 @@ function NavigationBar({
             <button
               type="button"
               onClick={() => navigate("/all_stores")}
-              className="p-2 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 transition-colors text-slate-700 shadow-xs"
+              className="p-2 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 transition-colors text-slate-700 shadow-xs cursor-pointer"
               title="Back to Directory"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -80,7 +80,7 @@ function NavigationBar({
                 <button
                   type="button"
                   onClick={handleCopyDomain}
-                  className="p-1 text-slate-400 hover:text-slate-700 transition-colors rounded-md"
+                  className="p-1 text-slate-400 hover:text-slate-700 transition-colors rounded-md cursor-pointer"
                   title={copied ? "Copied!" : "Copy Domain"}
                 >
                   {copied ? (
@@ -184,6 +184,7 @@ function App() {
                 path="/all_stores"
                 element={
                   <All_Stores
+                    selectedApp={selectedApp}
                     onTotalCountChange={setTotalStoresCount}
                     datePreset={datePreset}
                     startDate={startDate}
@@ -193,7 +194,7 @@ function App() {
                 }
               />
               <Route path="/analytics" element={<Analytics />} />
-              <Route path="/store/:domain" element={<Store_Details />} />
+              <Route path="/store/:domain" element={<Store_Details selectedApp={selectedApp} />} />
             </Routes>
           </main>
         </div>

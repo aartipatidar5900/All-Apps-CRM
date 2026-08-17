@@ -225,7 +225,7 @@ const DateFilter = ({
             <button
                 type="button"
                 onClick={handleToggleOpen}
-                className={`px-3 py-2 text-xs font-semibold rounded-xl border transition-all flex items-center gap-2 shadow-2xs ${isActive
+                className={`px-3 py-2 text-xs font-semibold rounded-xl border transition-all flex items-center gap-2 shadow-2xs cursor-pointer ${isActive
                     ? 'bg-slate-900 text-white border-slate-900'
                     : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 hover:text-slate-900'
                     }`}
@@ -248,7 +248,7 @@ const DateFilter = ({
                                     <button
                                         type="button"
                                         onClick={handleClearAll}
-                                        className="text-rose-600 hover:underline normal-case font-semibold text-[10px]"
+                                        className="text-rose-600 hover:underline normal-case font-semibold text-[10px] cursor-pointer"
                                     >
                                         Clear
                                     </button>
@@ -262,7 +262,7 @@ const DateFilter = ({
                                             key={preset.value}
                                             type="button"
                                             onClick={() => handleSelectPreset(preset.value)}
-                                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl font-semibold text-xs transition-colors ${isSelected
+                                            className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl font-semibold text-xs transition-colors cursor-pointer ${isSelected
                                                 ? 'bg-slate-900 text-white font-bold'
                                                 : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                                                 }`}
@@ -280,7 +280,7 @@ const DateFilter = ({
                             <button
                                 type="button"
                                 onClick={handleApply}
-                                className="w-full py-2 bg-slate-900 text-white font-bold text-xs rounded-xl hover:bg-slate-800 transition-colors shadow-2xs"
+                                className="w-full py-2 bg-slate-900 text-white font-bold text-xs rounded-xl hover:bg-slate-800 transition-colors shadow-2xs cursor-pointer"
                             >
                                 Apply Filter
                             </button>
@@ -307,7 +307,7 @@ const DateFilter = ({
                             <button
                                 type="button"
                                 onClick={handlePrevMonth}
-                                className="p-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                                className="p-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                                 title="Previous Month"
                             >
                                 <ChevronLeft className="w-4 h-4" />
@@ -318,7 +318,7 @@ const DateFilter = ({
                             <button
                                 type="button"
                                 onClick={handleNextMonth}
-                                className="p-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                                className="p-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                                 title="Next Month"
                             >
                                 <ChevronRight className="w-4 h-4" />
@@ -351,7 +351,7 @@ const DateFilter = ({
                                         key={dayNum}
                                         type="button"
                                         onClick={() => handleDayClick(dayNum)}
-                                        className={`h-8 w-full flex items-center justify-center text-xs transition-colors rounded-lg ${isStart || isEnd
+                                        className={`h-8 w-full flex items-center justify-center text-xs transition-colors rounded-lg cursor-pointer ${isStart || isEnd
                                             ? 'bg-slate-900 text-white font-bold shadow-xs'
                                             : inRange
                                                 ? 'bg-slate-100 text-slate-900 font-semibold'

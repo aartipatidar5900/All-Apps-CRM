@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   useReactTable,
@@ -21,17 +21,63 @@ import {
 import { StoreDetailsSkeleton } from '../components/SkeletonLoader';
 import { mockDiscounts } from '../data/mockData';
 
-const Store_Details = () => {
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+const Store_Details = ({ selectedApp = "Passonext" }) => {
   const { domain } = useParams();
   const navigate = useNavigate();
 
-  const storeData = useMemo(() => {
+  const [storeData, setStoreData] = useState(() => {
     return mockDiscounts.find(
       (s) => s.storeDomain.toLowerCase() === (domain || '').toLowerCase()
-    ) || mockDiscounts[0];
-  }, [domain]);
-  const loading = false;
-  const error = '';
+    ) || null;
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchStoreDetails() {
+      setLoading(true);
+      setError('');
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/events/${encodeURIComponent(selectedApp)}`);
+        if (!response.ok) {
+          throw new Error(`Failed to load store details: ${response.statusText}`);
+        }
+        const json = await response.json();
+        if (!isMounted) return;
+
+        if (json.success && json.data) {
+          const storesList = json.data.stores || [];
+          const match = storesList.find(
+            (s) => s.storeDomain.toLowerCase() === (domain || '').toLowerCase()
+          );
+          if (match) {
+            setStoreData(match);
+          } else {
+            const fallback = mockDiscounts.find(
+              (s) => s.storeDomain.toLowerCase() === (domain || '').toLowerCase()
+            );
+            setStoreData((prev) => prev || fallback || null);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching live store details:", err);
+        if (isMounted) setError(err.message);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    if (domain) {
+      fetchStoreDetails();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [domain, selectedApp]);
 
   // Pagination for Activity Timeline
   const [timelinePage, setTimelinePage] = useState(1);
@@ -429,7 +475,7 @@ const Store_Details = () => {
                   type="button"
                   disabled={timelinePage <= 1}
                   onClick={() => setTimelinePage((prev) => Math.max(prev - 1, 1))}
-                  className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   title="Previous Page"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
@@ -438,7 +484,7 @@ const Store_Details = () => {
                   type="button"
                   disabled={timelinePage >= totalTimelinePages}
                   onClick={() => setTimelinePage((prev) => Math.min(prev + 1, totalTimelinePages))}
-                  className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   title="Next Page"
                 >
                   <ChevronRight className="w-3.5 h-3.5" />
@@ -527,7 +573,7 @@ const Store_Details = () => {
                     type="button"
                     disabled={!discountTable.getCanPreviousPage()}
                     onClick={() => discountTable.previousPage()}
-                    className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   >
                     <ChevronLeft className="w-3.5 h-3.5" />
                   </button>
@@ -535,7 +581,7 @@ const Store_Details = () => {
                     type="button"
                     disabled={!discountTable.getCanNextPage()}
                     onClick={() => discountTable.nextPage()}
-                    className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                   >
                     <ChevronRight className="w-3.5 h-3.5" />
                   </button>

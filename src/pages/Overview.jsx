@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { DollarSign, Calendar, Activity } from "lucide-react";
 import Metric_Card from "../components/matric_card";
 import OverviewTrendChart from "../components/Charts/OverviewTrendChart";
@@ -6,6 +7,7 @@ import OverviewTrendChart from "../components/Charts/OverviewTrendChart";
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 export function Overview({ selectedApp = "Passonext", startDate = "", endDate = "" }) {
+  const navigate = useNavigate();
   const [metrics, setMetrics] = useState({
     totalRevenue: "$0.00",
     customerPortalCount: "0",
@@ -15,15 +17,18 @@ export function Overview({ selectedApp = "Passonext", startDate = "", endDate = 
     uninstalls: "0",
     planActivated: "0",
     planExpired: "0",
+    planCanceled: "0",
     planUnfrozen: "0",
     planDeclined: "0",
   });
   const [monthlyTrends, setMonthlyTrends] = useState([]);
   const [selectedMetric, setSelectedMetric] = useState(null); // null = "Installs V/S Uninstalls" dual view
   const [loading, setLoading] = useState(true);
+  const [chartLoading, setChartLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [chartRefreshKey, setChartRefreshKey] = useState(0);
 
+  // Full data fetch (metrics + trends) on app/date change
   useEffect(() => {
     let isMounted = true;
 
@@ -84,6 +89,7 @@ export function Overview({ selectedApp = "Passonext", startDate = "", endDate = 
                   customerPortalCount: 0,
                   planActivated: 0,
                   planExpired: 0,
+                  planCanceled: 0,
                   planUnfrozen: 0,
                   planDeclined: 0,
                 };
@@ -100,8 +106,10 @@ export function Overview({ selectedApp = "Passonext", startDate = "", endDate = 
                 shopTracker[sId] = "INACTIVE";
               } else if (ev.type === "SUBSCRIPTION_CHARGE_ACTIVATED" || ev.type === "ONE_TIME_CHARGE_ACTIVATED") {
                 mObj.planActivated += 1;
-              } else if (ev.type === "SUBSCRIPTION_CHARGE_EXPIRED" || ev.type === "ONE_TIME_CHARGE_EXPIRED" || ev.type === "SUBSCRIPTION_CHARGE_CANCELED") {
+              } else if (ev.type === "SUBSCRIPTION_CHARGE_EXPIRED" || ev.type === "ONE_TIME_CHARGE_EXPIRED") {
                 mObj.planExpired += 1;
+              } else if (ev.type === "SUBSCRIPTION_CHARGE_CANCELED") {
+                mObj.planCanceled += 1;
               } else if (ev.type === "SUBSCRIPTION_CHARGE_UNFROZEN") {
                 mObj.planUnfrozen += 1;
               } else if (ev.type === "SUBSCRIPTION_CHARGE_DECLINED") {
@@ -139,14 +147,73 @@ export function Overview({ selectedApp = "Passonext", startDate = "", endDate = 
     return () => {
       isMounted = false;
     };
-  }, [selectedApp, startDate, endDate, refreshKey]);
+  }, [selectedApp, startDate, endDate]);
 
-  const handleRefresh = () => {
-    setRefreshKey((k) => k + 1);
+  // Chart-only refresh (re-fetches data but only updates trends, not metric cards)
+  useEffect(() => {
+    if (chartRefreshKey === 0) return; // skip initial mount
+    let isMounted = true;
+
+    async function refreshChart() {
+      setChartLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (startDate) params.append("startDate", startDate);
+        if (endDate) params.append("endDate", endDate);
+        const queryString = params.toString();
+        const url = `${API_BASE_URL}/api/events/${encodeURIComponent(selectedApp)}${queryString ? `?${queryString}` : ""}`;
+
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("Failed to refresh chart data");
+        const json = await response.json();
+        if (!isMounted) return;
+
+        if (json.success && json.data) {
+          if (json.data.monthlyTrends && Array.isArray(json.data.monthlyTrends)) {
+            setMonthlyTrends(json.data.monthlyTrends);
+          }
+        }
+      } catch (err) {
+        console.error("Chart refresh error:", err);
+      } finally {
+        if (isMounted) setChartLoading(false);
+      }
+    }
+
+    refreshChart();
+    return () => { isMounted = false; };
+  }, [chartRefreshKey, selectedApp, startDate, endDate]);
+
+  const handleChartRefresh = () => {
+    setChartRefreshKey((k) => k + 1);
   };
 
   const handleCardClick = (cardId) => {
-    setSelectedMetric((prev) => (prev === cardId ? null : cardId));
+    if (selectedMetric === cardId) {
+      setSelectedMetric(null); // Toggle back to dual installs/uninstalls view
+    } else {
+      setSelectedMetric(cardId);
+    }
+  };
+
+  const handleNavigateToMerchants = (cardId) => {
+    let state;
+    if (cardId === 'installs') {
+      state = { initialStatusFilter: ['installed'] };
+    } else if (cardId === 'uninstalls') {
+      state = { initialStatusFilter: ['uninstalled'] };
+    } else if (cardId === 'planExpired') {
+      state = { initialStatusFilter: ['closed'] };
+    } else if (cardId === 'totalStores') {
+      state = { initialStatusFilter: ['installed', 'reopened'] };
+    } else if (cardId === 'planCanceled') {
+      state = { initialPlanFilter: ['No Plan'] };
+    } else if (cardId === 'planActivated') {
+      state = { initialPlanFilter: ['Starter Monthly ($9)', 'Pro Monthly ($19)', 'Enterprise Yearly ($768)', 'Basic - $8.00 Usd', '1500+ Customers - $9.99', '5001-25000 Customers - $19.99', 'More Than 25000 Customers - $29.99', 'Trial'] };
+    } else {
+      state = { initialStatusFilter: ['installed', 'reopened'] };
+    }
+    navigate('/all_stores', { state });
   };
 
   const cards = [
@@ -213,6 +280,12 @@ export function Overview({ selectedApp = "Passonext", startDate = "", endDate = 
       value: metrics.planDeclined,
       clickable: true,
     },
+    {
+      id: "planCanceled",
+      title: "Plan Canceled",
+      value: metrics.planCanceled,
+      clickable: true,
+    },
   ];
 
   return (
@@ -235,6 +308,7 @@ export function Overview({ selectedApp = "Passonext", startDate = "", endDate = 
             isLoading={loading}
             isActive={card.clickable ? selectedMetric === card.id : false}
             onClick={card.clickable ? () => handleCardClick(card.id) : undefined}
+            onValueClick={card.clickable ? () => handleNavigateToMerchants(card.id) : undefined}
           />
         ))}
       </div>
@@ -243,9 +317,9 @@ export function Overview({ selectedApp = "Passonext", startDate = "", endDate = 
       <OverviewTrendChart
         data={monthlyTrends}
         selectedMetric={selectedMetric}
-        loading={loading}
+        loading={loading || chartLoading}
         error={error}
-        onRefresh={handleRefresh}
+        onRefresh={handleChartRefresh}
       />
     </div>
   );

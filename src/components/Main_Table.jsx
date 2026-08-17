@@ -17,18 +17,19 @@ import {
     ArrowUpDown,
     ArrowUp,
     ArrowDown,
-    Filter,
-    Check,
+    ListFilter,
     GripVertical,
 } from 'lucide-react';
 
 const Main_Table = ({
     discounts = [],
+    allDiscounts = [],
     totalCount,
     page = 1,
     limit = 10,
     search = '',
-    statusFilter = 'all',
+    statusFilter = [],
+    planFilter = [],
     sortField = 'updatedAt',
     sortOrder = 'desc',
     loading = false,
@@ -38,6 +39,9 @@ const Main_Table = ({
     onPageChange,
     onLimitChange,
     onRowClick,
+    onPlanFilterChange,
+    activeFiltersText = '',
+    onResetFilters,
 }) => {
     'use no memo';
     const navigate = useNavigate();
@@ -47,9 +51,9 @@ const Main_Table = ({
     const [isStatusPopupOpen, setIsStatusPopupOpen] = useState(false);
     const statusPopupRef = useRef(null);
 
-    // Expandable Search state
-    const [isSearchOpen, setIsSearchOpen] = useState(Boolean(search));
-    const searchInputRef = useRef(null);
+    // Popover state for Plan Column
+    const [isPlanPopupOpen, setIsPlanPopupOpen] = useState(false);
+    const planPopupRef = useRef(null);
 
     // Column Drag & Drop Reordering state
     const [columnOrder, setColumnOrder] = useState([
@@ -57,25 +61,21 @@ const Main_Table = ({
         'storeEmail',
         'onboardingStatus',
         'isActive',
-        'discounts',
+        'plan',
         'createdOn',
         'updatedAt',
         'actions',
     ]);
     const [draggedColumnId, setDraggedColumnId] = useState(null);
 
-    // Auto-focus search input when opened
-    useEffect(() => {
-        if (isSearchOpen && searchInputRef.current) {
-            searchInputRef.current.focus();
-        }
-    }, [isSearchOpen]);
-
     // Close popup when clicking outside
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (statusPopupRef.current && !statusPopupRef.current.contains(event.target)) {
                 setIsStatusPopupOpen(false);
+            }
+            if (planPopupRef.current && !planPopupRef.current.contains(event.target)) {
+                setIsPlanPopupOpen(false);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
@@ -131,13 +131,62 @@ const Main_Table = ({
         }
     };
 
-    const statusOptions = [
-        { label: 'All Statuses', value: 'all', badgeClass: 'bg-slate-100 text-slate-700 border-slate-200' },
-        { label: 'Installed', value: 'installed', badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-        { label: 'Uninstalled', value: 'uninstalled', badgeClass: 'bg-rose-50 text-rose-700 border-rose-200' },
-        { label: 'Store Closed', value: 'closed', badgeClass: 'bg-amber-50 text-amber-700 border-amber-200' },
-        { label: 'Store Reopened', value: 'reopened', badgeClass: 'bg-sky-50 text-sky-700 border-sky-200' },
-    ];
+    const statusOptions = useMemo(() => {
+        const counts = {
+            installed: 0,
+            uninstalled: 0,
+            closed: 0,
+            reopened: 0
+        };
+        allDiscounts.forEach(d => {
+            const rawEvents = Array.isArray(d?.pastEvents) ? d.pastEvents : [];
+            let latestEventName = '';
+            if (rawEvents.length > 0) {
+                const sorted = [...rawEvents].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+                latestEventName = sorted[0]?.eventName || sorted[0]?.type || '';
+            }
+            const lowerEvent = latestEventName.toLowerCase();
+            const isClosed = lowerEvent.includes('close') || lowerEvent.includes('closed') || d?.isStoreClosed;
+            const isUninstall = lowerEvent.includes('uninstall') || lowerEvent.includes('uninstalled') || d?.isActive === false;
+            const isReopened = lowerEvent.includes('reopen') || lowerEvent.includes('reopened');
+
+            if (isClosed) counts.closed++;
+            else if (isUninstall) counts.uninstalled++;
+            else if (isReopened) counts.reopened++;
+            else counts.installed++;
+        });
+
+        return [
+            { label: 'Installed', value: 'installed', count: counts.installed },
+            { label: 'Uninstalled', value: 'uninstalled', count: counts.uninstalled },
+            { label: 'Closed', value: 'closed', count: counts.closed },
+            { label: 'Store Re-Opened', value: 'reopened', count: counts.reopened }
+        ];
+    }, [allDiscounts]);
+
+    const planOptions = useMemo(() => {
+        const counts = {};
+        allDiscounts.forEach(d => {
+            const plan = d.plan || 'No Plan';
+            counts[plan] = (counts[plan] || 0) + 1;
+        });
+        const uniquePlans = Array.from(new Set([
+            ...Object.keys(counts),
+            ...planFilter
+        ]));
+        uniquePlans.sort((a, b) => {
+            if (a === 'No Plan') return -1;
+            if (b === 'No Plan') return 1;
+            if (a === 'Trial') return -1;
+            if (b === 'Trial') return 1;
+            return a.localeCompare(b);
+        });
+        return uniquePlans.map(plan => ({
+            label: plan,
+            value: plan,
+            count: counts[plan] || 0
+        }));
+    }, [allDiscounts, planFilter]);
 
     const columns = useMemo(
         () => [
@@ -202,13 +251,36 @@ const Main_Table = ({
                 },
             },
             {
-                accessorKey: 'discounts',
-                header: 'Discounts',
-                enableSorting: true,
+                accessorKey: 'plan',
+                header: 'Plan',
+                enableSorting: false,
                 cell: ({ getValue }) => {
-                    const val = getValue();
-                    const count = Array.isArray(val) ? val.length : val ? 1 : 0;
-                    return <span className="text-slate-700 font-semibold text-sm">{count}</span>;
+                    const val = getValue() || 'N/A';
+                    if (val === 'Trial') {
+                        return (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border bg-orange-100/70 text-orange-700 border-orange-200 uppercase tracking-wider">
+                                TRIAL
+                            </span>
+                        );
+                    }
+                    if (val.endsWith(' Trial')) {
+                        const cleanPlan = val.replace(' Trial', '');
+                        return (
+                            <div className="flex items-center gap-1.5">
+                                <span className="font-semibold text-slate-700 font-sans text-sm">
+                                    {cleanPlan}
+                                </span>
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border bg-orange-100/70 text-orange-700 border-orange-200 uppercase tracking-wider">
+                                    TRIAL
+                                </span>
+                            </div>
+                        );
+                    }
+                    return (
+                        <span className="font-semibold text-slate-700 font-sans text-sm">
+                            {val}
+                        </span>
+                    );
                 },
             },
             {
@@ -270,7 +342,7 @@ const Main_Table = ({
                                 navigate(`/store/${encodeURIComponent(row.original.storeDomain)}`);
                             }
                         }}
-                        className="inline-flex items-center justify-center p-1.5 text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors shadow-xs"
+                        className="inline-flex items-center justify-center p-1.5 text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors shadow-xs cursor-pointer"
                         title="View Store Details"
                     >
                         <Eye className="w-4 h-4" />
@@ -342,9 +414,6 @@ const Main_Table = ({
         if (columnId === 'storeDomain' || columnId === 'storeEmail') {
             return isSorted === 'asc' ? 'A-Z' : 'Z-A';
         }
-        if (columnId === 'discounts') {
-            return isSorted === 'asc' ? 'Low → High' : 'High → Low';
-        }
         if (columnId === 'createdOn' || columnId === 'updatedAt') {
             return isSorted === 'asc' ? 'Oldest' : 'Newest';
         }
@@ -382,47 +451,54 @@ const Main_Table = ({
 
     return (
         <div className="w-full bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
-            {/* Toolbar: Expandable Search placed at the end */}
-            <div className="p-4 border-b border-slate-100 bg-white flex items-center justify-end">
+            {/* Toolbar: Dynamic left aligned title and right aligned static search */}
+            <div className="p-5 border-b border-slate-100 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <h2 className="text-base font-bold text-slate-800 tracking-tight">
+                    Installation Database
+                </h2>
                 <div className="flex items-center gap-3">
-                    {isSearchOpen || search ? (
-                        <div className="relative flex items-center animate-in fade-in zoom-in-95 duration-150">
-                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                                <Search className="w-4 h-4" />
-                            </div>
-                            <input
-                                ref={searchInputRef}
-                                type="text"
-                                value={search}
-                                onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
-                                placeholder="Search stores..."
-                                className="w-64 sm:w-80 pl-9 pr-8 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 transition-all placeholder:text-slate-400 text-slate-900 font-medium"
-                            />
+                    <div className="relative flex items-center">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                            <Search className="w-4 h-4" />
+                        </div>
+                        <input
+                            type="text"
+                            value={search}
+                            onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
+                            placeholder="Search domain, name or email..."
+                            className="w-64 sm:w-80 pl-9 pr-8 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 transition-all placeholder:text-slate-400 text-slate-900 font-semibold"
+                        />
+                        {search && (
                             <button
                                 type="button"
-                                onClick={() => {
-                                    if (onSearchChange) onSearchChange('');
-                                    setIsSearchOpen(false);
-                                }}
-                                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-700 transition-colors"
-                                title="Close Search"
+                                onClick={() => onSearchChange && onSearchChange('')}
+                                className="absolute right-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                                title="Clear Search"
                             >
-                                <X className="w-4 h-4" />
+                                <X className="w-3.5 h-3.5" />
                             </button>
-                        </div>
-                    ) : (
-                        <button
-                            type="button"
-                            onClick={() => setIsSearchOpen(true)}
-                            className="p-2 text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl transition-all flex items-center gap-2 text-xs font-semibold shadow-2xs"
-                            title="Open Search"
-                        >
-                            <Search className="w-4 h-4 text-slate-500" />
-                            <span className="hidden sm:inline">Search</span>
-                        </button>
-                    )}
+                        )}
+                    </div>
                 </div>
             </div>
+
+            {/* Filter banner placed inside card directly below toolbar */}
+            {activeFiltersText && (
+                <div className="mx-5 mt-4 p-3 rounded-xl bg-slate-100/80 border border-slate-200 text-xs text-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-semibold animate-in fade-in duration-150">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                        <span>Filtering merchants by clicked chart/metric criteria:</span>
+                        <span className="font-mono bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-800 font-bold shadow-2xs">
+                            {activeFiltersText}
+                        </span>
+                    </div>
+                    <button
+                        onClick={onResetFilters}
+                        className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 px-3 py-1 rounded-lg shadow-2xs font-bold transition-all cursor-pointer whitespace-nowrap"
+                    >
+                        Reset Filters
+                    </button>
+                </div>
+            )}
 
             {/* Table Container */}
             <div className="overflow-x-auto relative">
@@ -473,63 +549,61 @@ const Main_Table = ({
                                                                 e.stopPropagation();
                                                                 setIsStatusPopupOpen((prev) => !prev);
                                                             }}
-                                                            className={`p-1 rounded-md border transition-all flex items-center gap-1 ${statusFilter !== 'all'
-                                                                ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
-                                                                : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-slate-900'
-                                                                }`}
+                                                            className="p-1 rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-all flex items-center gap-1 cursor-pointer"
                                                             title="Filter Status Popup"
                                                         >
-                                                            <Filter className="w-3 h-3" />
+                                                            <ListFilter className="w-3.5 h-3.5" />
                                                         </button>
 
                                                         {/* Status Filter Floating Popup Menu */}
                                                         {isStatusPopupOpen && (
                                                             <div
-                                                                className="absolute left-0 mt-2 w-52 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 p-2 text-xs normal-case font-normal animate-in fade-in slide-in-from-top-2 duration-150"
+                                                                className="absolute left-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 p-3 text-xs normal-case font-normal animate-in fade-in slide-in-from-top-2 duration-150"
                                                                 onClick={(e) => e.stopPropagation()}
                                                             >
-                                                                <div className="px-3 py-1.5 font-bold text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-100 mb-1 flex items-center justify-between">
-                                                                    <span>Filter Status</span>
-                                                                    {statusFilter !== 'all' && (
+                                                                <div className="px-1 py-1.5 font-bold text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-100 mb-2 flex items-center justify-between">
+                                                                    <span>FILTER</span>
+                                                                    {statusFilter.length > 0 && (
                                                                         <button
                                                                             type="button"
                                                                             onClick={() => {
-                                                                                if (onStatusFilterChange) onStatusFilterChange('all');
+                                                                                if (onStatusFilterChange) onStatusFilterChange([]);
                                                                                 setIsStatusPopupOpen(false);
                                                                             }}
-                                                                            className="text-rose-600 hover:underline text-[10px]"
+                                                                            className="text-rose-600 hover:underline text-[10px] normal-case font-bold cursor-pointer"
                                                                         >
                                                                             Clear
                                                                         </button>
                                                                     )}
                                                                 </div>
 
-                                                                <div className="space-y-1">
+                                                                <div className="space-y-2">
                                                                     {statusOptions.map((option) => {
-                                                                        const isSelected = statusFilter === option.value;
+                                                                        const isChecked = statusFilter.includes(option.value);
                                                                         return (
-                                                                            <button
+                                                                            <label
                                                                                 key={option.value}
-                                                                                type="button"
-                                                                                onClick={() => {
-                                                                                    if (onStatusFilterChange) onStatusFilterChange(option.value);
-                                                                                    setIsStatusPopupOpen(false);
-                                                                                }}
-                                                                                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-colors ${isSelected
-                                                                                    ? 'bg-slate-100 text-slate-900 font-bold'
-                                                                                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                                                                                    }`}
+                                                                                className="flex items-center justify-between px-2 py-1 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
                                                                             >
-                                                                                <span className="flex items-center gap-2">
-                                                                                    <span className={`inline-block w-2 h-2 rounded-full ${option.value === 'installed' ? 'bg-emerald-500' :
-                                                                                        option.value === 'uninstalled' ? 'bg-rose-500' :
-                                                                                            option.value === 'closed' ? 'bg-amber-500' :
-                                                                                                option.value === 'reopened' ? 'bg-sky-500' : 'bg-slate-400'
-                                                                                        }`} />
+                                                                                <span className="flex items-center gap-2 text-slate-700 font-semibold">
+                                                                                    <input
+                                                                                        type="checkbox"
+                                                                                        checked={isChecked}
+                                                                                        onChange={() => {
+                                                                                            if (!onStatusFilterChange) return;
+                                                                                            const nextFilter = isChecked
+                                                                                                ? statusFilter.filter(v => v !== option.value)
+                                                                                                : [...statusFilter, option.value];
+                                                                                            onStatusFilterChange(nextFilter);
+                                                                                        }}
+                                                                                        className="rounded border-slate-300 text-slate-900 focus:ring-slate-900/10 cursor-pointer w-3.5 h-3.5"
+                                                                                    />
                                                                                     {option.label}
                                                                                 </span>
-                                                                                {isSelected && <Check className="w-3.5 h-3.5 text-slate-900" />}
-                                                                            </button>
+                                                                                <span className="text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded-md">
+                                                                                    {option.count}
+                                                                                </span>
+                                                                            </label>
                                                                         );
                                                                     })}
                                                                 </div>
@@ -553,6 +627,114 @@ const Main_Table = ({
                                                             <span className="px-1.5 py-0.5 text-[10px] font-bold tracking-tight rounded bg-slate-900 text-white capitalize shadow-2xs">
                                                                 {badgeText}
                                                             </span>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                {/* Plan Column Filter Popup Trigger */}
+                                                {header.id === 'plan' && (
+                                                    <div className="relative inline-block text-left font-normal normal-case" ref={planPopupRef}>
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setIsPlanPopupOpen((prev) => !prev);
+                                                            }}
+                                                            className="p-1 rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-all flex items-center gap-1 cursor-pointer"
+                                                            title="Filter Plan Popup"
+                                                        >
+                                                            <ListFilter className="w-3.5 h-3.5" />
+                                                        </button>
+
+                                                        {isPlanPopupOpen && (
+                                                            <div
+                                                                className="absolute left-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 p-3 text-xs normal-case font-normal animate-in fade-in slide-in-from-top-2 duration-150"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            >
+                                                                {/* SORT SECTION */}
+                                                                <div className="px-1 py-1 font-bold text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-100 mb-2">
+                                                                    SORT
+                                                                </div>
+                                                                <div className="space-y-1 mb-3">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            if (onSortChange) onSortChange('plan', 'asc');
+                                                                            setIsPlanPopupOpen(false);
+                                                                        }}
+                                                                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors text-left cursor-pointer"
+                                                                    >
+                                                                        ↑ Sort Ascending
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            if (onSortChange) onSortChange('plan', 'desc');
+                                                                            setIsPlanPopupOpen(false);
+                                                                        }}
+                                                                        className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors text-left cursor-pointer"
+                                                                    >
+                                                                        ↓ Sort Descending
+                                                                    </button>
+                                                                </div>
+
+                                                                {/* FILTER SECTION */}
+                                                                <div className="px-1 py-1.5 font-bold text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-100 mb-2 flex items-center justify-between">
+                                                                    <span>FILTER</span>
+                                                                    {planFilter.length > 0 && (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                if (onPlanFilterChange) onPlanFilterChange([]);
+                                                                                setIsPlanPopupOpen(false);
+                                                                            }}
+                                                                            className="text-rose-600 hover:underline text-[10px] normal-case font-bold cursor-pointer"
+                                                                        >
+                                                                            Clear
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+
+                                                                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                                                                    {planOptions.map((option) => {
+                                                                        const isChecked = planFilter.includes(option.value);
+                                                                        return (
+                                                                            <label
+                                                                                key={option.value}
+                                                                                className="flex items-center justify-between px-2 py-1 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
+                                                                            >
+                                                                                <span className="flex items-center gap-2 text-slate-700 font-semibold">
+                                                                                    <input
+                                                                                        type="checkbox"
+                                                                                        checked={isChecked}
+                                                                                        onChange={() => {
+                                                                                            if (!onPlanFilterChange) return;
+                                                                                            const nextFilter = isChecked
+                                                                                                ? planFilter.filter(v => v !== option.value)
+                                                                                                : [...planFilter, option.value];
+                                                                                            onPlanFilterChange(nextFilter);
+                                                                                        }}
+                                                                                        className="rounded border-slate-300 text-slate-900 focus:ring-slate-900/10 cursor-pointer w-3.5 h-3.5"
+                                                                                    />
+                                                                                    {option.label.endsWith(' Trial') ? (
+                                                                                        <span className="inline-flex items-center gap-1">
+                                                                                            <span>{option.label.replace(' Trial', '')}</span>
+                                                                                            <span className="inline-flex items-center px-1 py-0.2 rounded-[3px] text-[8px] font-bold border bg-orange-100/70 text-orange-700 border-orange-200 uppercase tracking-wider scale-90">TRIAL</span>
+                                                                                        </span>
+                                                                                    ) : option.label === 'Trial' ? (
+                                                                                        <span className="inline-flex items-center px-1 py-0.2 rounded-[3px] text-[8px] font-bold border bg-orange-100/70 text-orange-700 border-orange-200 uppercase tracking-wider scale-90">TRIAL</span>
+                                                                                    ) : (
+                                                                                        option.label
+                                                                                    )}
+                                                                                </span>
+                                                                                <span className="text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded-md">
+                                                                                    {option.count}
+                                                                                </span>
+                                                                            </label>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
                                                         )}
                                                     </div>
                                                 )}
@@ -646,7 +828,7 @@ const Main_Table = ({
                         type="button"
                         disabled={page <= 1}
                         onClick={() => onPageChange && onPageChange(page - 1)}
-                        className="inline-flex items-center justify-center p-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        className="inline-flex items-center justify-center p-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                         title="Previous Page"
                     >
                         <ChevronLeft className="w-4 h-4" />
@@ -655,7 +837,7 @@ const Main_Table = ({
                         type="button"
                         disabled={page >= totalPages}
                         onClick={() => onPageChange && onPageChange(page + 1)}
-                        className="inline-flex items-center justify-center p-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        className="inline-flex items-center justify-center p-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                         title="Next Page"
                     >
                         <ChevronRight className="w-4 h-4" />

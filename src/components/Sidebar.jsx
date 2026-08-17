@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { Store, TrendingUp, Settings } from "lucide-react";
+import { Home, Users, TrendingUp, Settings, Store } from "lucide-react";
 
 const Sidebar = () => {
   const navigate = useNavigate();
@@ -8,12 +8,12 @@ const Sidebar = () => {
   const menuItems = [
     {
       text: "Overview",
-      icon: <Store className="w-4 h-4" />,
+      icon: <Home className="w-4 h-4" />,
       path: "/overview",
     },
     {
       text: "Merchants",
-      icon: <Store className="w-4 h-4" />,
+      icon: <Users className="w-4 h-4" />,
       path: "/all_stores",
     },
     {
@@ -33,23 +33,18 @@ const Sidebar = () => {
           </div>
           <div>
             <h1 className="font-bold text-slate-900 text-base leading-tight">
-              Discount Ninja
+              All Apps CRM
             </h1>
-            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
-              CRM Dashboard
-            </p>
           </div>
         </div>
 
         {/* Navigation Links */}
         <nav className="p-3">
-          <span className="px-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
-            Main Menu
-          </span>
-          <ul className="space-y-1">
+          <ul className="space-y-1.5">
             {menuItems.map((item) => {
               const isActive =
                 location.pathname === item.path ||
+                (item.path === "/overview" && location.pathname === "/") ||
                 (item.path === "/all_stores" &&
                   location.pathname.startsWith("/store/"));
 
@@ -58,18 +53,20 @@ const Sidebar = () => {
                   <button
                     type="button"
                     onClick={() => navigate(item.path)}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-150 cursor-pointer ${
                       isActive
-                        ? "bg-slate-100 text-slate-900 font-bold"
-                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                        ? "bg-[#111827] text-white font-semibold shadow-xs"
+                        : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
                     }`}
                   >
                     <span
-                      className={isActive ? "text-slate-900" : "text-slate-500"}
+                      className={`flex items-center justify-center ${
+                        isActive ? "text-white" : "text-slate-500"
+                      }`}
                     >
                       {item.icon}
                     </span>
-                    {item.text}
+                    <span className="truncate">{item.text}</span>
                   </button>
                 </li>
               );
@@ -82,10 +79,21 @@ const Sidebar = () => {
       <div className="p-3 border-t border-slate-100">
         <button
           type="button"
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+          onClick={() => navigate("/settings")}
+          className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-colors cursor-pointer ${
+            location.pathname === "/settings"
+              ? "bg-[#111827] text-white font-semibold shadow-xs"
+              : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900"
+          }`}
         >
-          <Settings className="w-4 h-4 text-slate-500" />
-          Settings
+          <Settings
+            className={`w-4 h-4 ${
+              location.pathname === "/settings"
+                ? "text-white"
+                : "text-slate-500"
+            }`}
+          />
+          <span className="truncate">Settings</span>
         </button>
       </div>
     </aside>

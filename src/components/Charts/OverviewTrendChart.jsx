@@ -27,7 +27,8 @@ const METRIC_CONFIGS = {
   },
   totalRevenue: {
     title: "Total Revenue Trend",
-    subtitle: "Time series trend of total revenue across all historical periods",
+    subtitle:
+      "Time series trend of total revenue across all historical periods",
     color: "#4f46e5", // Indigo
     dataKey: "totalRevenue",
     name: "Total Revenue",
@@ -35,7 +36,8 @@ const METRIC_CONFIGS = {
   },
   customerPortalCount: {
     title: "Customer Portal Count Trend",
-    subtitle: "Time series trend of customer portal counts across all historical periods",
+    subtitle:
+      "Time series trend of customer portal counts across all historical periods",
     color: "#8b5cf6", // Violet
     dataKey: "customerPortalCount",
     name: "Customer Portal Count",
@@ -49,31 +51,43 @@ const METRIC_CONFIGS = {
   },
   planActivated: {
     title: "Plan Activated Trend",
-    subtitle: "Time series trend of plan activations across all historical periods",
+    subtitle:
+      "Time series trend of plan activations across all historical periods",
     color: "#3b82f6", // Blue
     dataKey: "planActivated",
     name: "Plan Activated",
   },
   planExpired: {
     title: "Plan Expired Trend",
-    subtitle: "Time series trend of expired plans across all historical periods",
+    subtitle:
+      "Time series trend of expired plans across all historical periods",
     color: "#f59e0b", // Amber
     dataKey: "planExpired",
     name: "Plan Expired",
   },
   planUnfrozen: {
     title: "Plan Unfrozen Trend",
-    subtitle: "Time series trend of unfrozen plans across all historical periods",
+    subtitle:
+      "Time series trend of unfrozen plans across all historical periods",
     color: "#14b8a6", // Teal
     dataKey: "planUnfrozen",
     name: "Plan Unfrozen",
   },
   planDeclined: {
     title: "Plan Declined Trend",
-    subtitle: "Time series trend of declined plans across all historical periods",
+    subtitle:
+      "Time series trend of declined plans across all historical periods",
     color: "#f43f5e", // Rose
     dataKey: "planDeclined",
     name: "Plan Declined",
+  },
+  planCanceled: {
+    title: "Plan Canceled Trend",
+    subtitle:
+      "Time series trend of canceled plans across all historical periods",
+    color: "#f97316", // Orange
+    dataKey: "planCanceled",
+    name: "Plan Canceled",
   },
 };
 
@@ -88,10 +102,14 @@ export default function OverviewTrendChart({
   const chartInstance = useRef(null);
 
   // Active configuration: either a single metric config or the default dual Installs V/S Uninstalls
-  const isSingleMetric = Boolean(selectedMetric && METRIC_CONFIGS[selectedMetric]);
+  const isSingleMetric = Boolean(
+    selectedMetric && METRIC_CONFIGS[selectedMetric],
+  );
   const activeConfig = isSingleMetric ? METRIC_CONFIGS[selectedMetric] : null;
 
-  const chartTitle = activeConfig ? activeConfig.title : "Installs V/S Uninstalls";
+  const chartTitle = activeConfig
+    ? activeConfig.title
+    : "Installs V/S Uninstalls";
   const chartSubtitle = activeConfig
     ? activeConfig.subtitle
     : "Time series trend of installations and uninstallations across all historical periods";
@@ -113,15 +131,15 @@ export default function OverviewTrendChart({
         {
           name: activeConfig.name,
           type: "bar",
-          barMaxWidth: 46,
+          barMaxWidth: 52,
+          barCategoryGap: "40%",
           itemStyle: {
             color: activeConfig.color,
-            borderRadius: [4, 4, 0, 0],
+            borderRadius: [5, 5, 0, 0],
           },
           label: {
             show: true,
-            position: "insideTop",
-            distance: 8,
+            position: "inside",
             color: "#ffffff",
             fontSize: 10,
             fontWeight: 700,
@@ -146,16 +164,16 @@ export default function OverviewTrendChart({
         {
           name: "Installs",
           type: "bar",
-          barMaxWidth: 26,
-          barGap: "15%",
+          barMaxWidth: 40,
+          barGap: "0%",
+          barCategoryGap: "35%",
           itemStyle: {
-            color: "#22c55e", // Green
+            color: "#28a745", // Green
             borderRadius: [4, 4, 0, 0],
           },
           label: {
             show: true,
-            position: "insideTop",
-            distance: 8,
+            position: "inside",
             color: "#ffffff",
             fontSize: 10,
             fontWeight: 700,
@@ -166,15 +184,15 @@ export default function OverviewTrendChart({
         {
           name: "Uninstalls",
           type: "bar",
-          barMaxWidth: 26,
+          barMaxWidth: 40,
+          barCategoryGap: "35%",
           itemStyle: {
             color: "#ef4444", // Red
             borderRadius: [4, 4, 0, 0],
           },
           label: {
             show: true,
-            position: "insideTop",
-            distance: 8,
+            position: "inside",
             color: "#ffffff",
             fontSize: 10,
             fontWeight: 700,
@@ -194,28 +212,28 @@ export default function OverviewTrendChart({
             color: "rgba(241, 245, 249, 0.6)",
           },
         },
-        backgroundColor: "rgba(255, 255, 255, 0.98)",
-        borderColor: "#e2e8f0",
+        backgroundColor: "rgba(24, 24, 27, 0.95)",
+        borderColor: "rgba(255, 255, 255, 0.1)",
         borderWidth: 1,
-        textStyle: { color: "#0f172a", fontSize: 12 },
+        textStyle: { color: "#ffffff", fontSize: 12 },
         padding: [10, 14],
         extraCssText:
-          "box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); border-radius: 12px;",
+          "box-shadow: 0 10px 25px -5px rgba(0,0,0,0.4), 0 8px 10px -6px rgba(0,0,0,0.3); border-radius: 10px; backdrop-filter: blur(4px);",
         formatter: (params) => {
           if (!params || params.length === 0) return "";
-          const header = `<div style="font-weight: 700; margin-bottom: 6px; color: #1e293b;">${params[0].axisValue}</div>`;
+          const header = `<div style="font-weight: 700; margin-bottom: 8px; color: #ffffff; font-size: 12px;">${params[0].axisValue}</div>`;
           const rows = params
             .map((item) => {
-              const marker = `<span style="display:inline-block;margin-right:6px;border-radius:3px;width:10px;height:10px;background-color:${item.color};"></span>`;
+              const marker = `<span style="display:inline-block;margin-right:8px;border-radius:50%;width:8px;height:8px;background-color:${item.color};"></span>`;
               let formattedVal = item.value;
               if (activeConfig?.isCurrency) {
                 formattedVal = "$" + Number(item.value).toLocaleString();
               } else if (typeof item.value === "number") {
                 formattedVal = item.value.toLocaleString();
               }
-              return `<div style="display: flex; justify-content: space-between; gap: 16px; margin-top: 3px; font-size: 11px;">
-                <span>${marker} ${item.seriesName}</span>
-                <span style="font-weight: 700; color: #0f172a;">${formattedVal}</span>
+              return `<div style="display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-top: 4px; font-size: 12px; color: #cbd5e1;">
+                <span style="display: flex; align-items: center;">${marker} ${item.seriesName}</span>
+                <span style="font-weight: 700; color: #ffffff;">${formattedVal}</span>
               </div>`;
             })
             .join("");
@@ -238,6 +256,7 @@ export default function OverviewTrendChart({
           color: "#64748b",
           fontSize: 11,
           margin: 14,
+          interval: 0,
         },
       },
       yAxis: {
@@ -265,27 +284,34 @@ export default function OverviewTrendChart({
           type: "slider",
           show: true,
           xAxisIndex: [0],
-          bottom: 2,
-          height: 12,
+          left: "15%",
+          right: "15%",
+          bottom: 4,
+          height: 14,
           start: 0,
-          end: data.length > 8 ? 60 : 100,
+          end: data.length > 8 ? Math.round((8 / data.length) * 100) : 100,
           borderColor: "transparent",
           backgroundColor: "#f1f5f9",
-          fillerColor: "rgba(203, 213, 225, 0.7)",
+          fillerColor: "#cbd5e1",
           showDetail: false,
           showDataShadow: false,
+          brushSelect: false,
+          handleIcon: "roundRect",
           handleSize: "100%",
           handleStyle: {
             color: "#94a3b8",
-            borderColor: "#cbd5e1",
+            borderColor: "transparent",
+            borderRadius: 3,
           },
-          moveHandleStyle: {
-            color: "#94a3b8",
-          },
+          moveHandleSize: 0,
+          borderRadius: 4,
         },
         {
           type: "inside",
           xAxisIndex: [0],
+          zoomOnMouseWheel: false,
+          moveOnMouseMove: true,
+          moveOnMouseWheel: true,
         },
       ],
       series,
@@ -341,7 +367,9 @@ export default function OverviewTrendChart({
           className="p-2 rounded-xl border border-slate-200/80 text-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs disabled:opacity-50 cursor-pointer"
           title="Refresh Chart"
         >
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-indigo-600" : ""}`} />
+          <RefreshCw
+            className={`w-4 h-4 ${loading ? "animate-spin text-indigo-600" : ""}`}
+          />
         </button>
       </div>
 
