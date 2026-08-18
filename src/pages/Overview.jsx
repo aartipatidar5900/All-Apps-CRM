@@ -1,16 +1,19 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { DollarSign, Calendar, Activity } from "lucide-react";
+import { DollarSign, Calendar } from "lucide-react";
 import Metric_Card from "../components/matric_card";
 import OverviewTrendChart from "../components/Charts/OverviewTrendChart";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
-export function Overview({ selectedApp = "Passonext", startDate = "", endDate = "" }) {
+export function Overview({
+  selectedApp = "Passonext",
+  startDate = "",
+  endDate = "",
+}) {
   const navigate = useNavigate();
   const [metrics, setMetrics] = useState({
     totalRevenue: "$0.00",
-    customerPortalCount: "0",
     weeklyInstalls: "0",
     totalStores: "0",
     installs: "0",
@@ -34,6 +37,7 @@ export function Overview({ selectedApp = "Passonext", startDate = "", endDate = 
 
     async function loadData() {
       setLoading(true);
+      setMonthlyTrends([]);
       setError(null);
       try {
         const params = new URLSearchParams();
@@ -53,20 +57,18 @@ export function Overview({ selectedApp = "Passonext", startDate = "", endDate = 
           if (json.data.metrics) {
             setMetrics({
               ...json.data.metrics,
-              customerPortalCount:
-                json.data.metrics.customerPortalCount ||
-                (json.data.activeInstallStoresCount
-                  ? (json.data.activeInstallStoresCount * 85).toLocaleString()
-                  : "0"),
             });
           }
-          if (json.data.monthlyTrends && Array.isArray(json.data.monthlyTrends)) {
+          if (
+            json.data.monthlyTrends &&
+            Array.isArray(json.data.monthlyTrends)
+          ) {
             setMonthlyTrends(json.data.monthlyTrends);
           } else if (json.data.events && Array.isArray(json.data.events)) {
             // Fallback frontend aggregation if needed
             const monthsMap = {};
             const sorted = [...json.data.events].sort(
-              (a, b) => new Date(a.occurredAt) - new Date(b.occurredAt)
+              (a, b) => new Date(a.occurredAt) - new Date(b.occurredAt),
             );
             const shopTracker = {};
 
@@ -86,7 +88,6 @@ export function Overview({ selectedApp = "Passonext", startDate = "", endDate = 
                   totalStores: 0,
                   totalRevenue: 0,
                   weeklyInstalls: 0,
-                  customerPortalCount: 0,
                   planActivated: 0,
                   planExpired: 0,
                   planCanceled: 0,
@@ -98,15 +99,27 @@ export function Overview({ selectedApp = "Passonext", startDate = "", endDate = 
               const mObj = monthsMap[mKey];
               const sId = ev.shop?.id || ev.shop?.myshopifyDomain || "unknown";
 
-              if (ev.type === "RELATIONSHIP_INSTALLED" || ev.type === "RELATIONSHIP_REACTIVATED") {
+              if (
+                ev.type === "RELATIONSHIP_INSTALLED" ||
+                ev.type === "RELATIONSHIP_REACTIVATED"
+              ) {
                 mObj.installs += 1;
                 shopTracker[sId] = "ACTIVE";
-              } else if (ev.type === "RELATIONSHIP_UNINSTALLED" || ev.type === "RELATIONSHIP_DEACTIVATED") {
+              } else if (
+                ev.type === "RELATIONSHIP_UNINSTALLED" ||
+                ev.type === "RELATIONSHIP_DEACTIVATED"
+              ) {
                 mObj.uninstalls += 1;
                 shopTracker[sId] = "INACTIVE";
-              } else if (ev.type === "SUBSCRIPTION_CHARGE_ACTIVATED" || ev.type === "ONE_TIME_CHARGE_ACTIVATED") {
+              } else if (
+                ev.type === "SUBSCRIPTION_CHARGE_ACTIVATED" ||
+                ev.type === "ONE_TIME_CHARGE_ACTIVATED"
+              ) {
                 mObj.planActivated += 1;
-              } else if (ev.type === "SUBSCRIPTION_CHARGE_EXPIRED" || ev.type === "ONE_TIME_CHARGE_EXPIRED") {
+              } else if (
+                ev.type === "SUBSCRIPTION_CHARGE_EXPIRED" ||
+                ev.type === "ONE_TIME_CHARGE_EXPIRED"
+              ) {
                 mObj.planExpired += 1;
               } else if (ev.type === "SUBSCRIPTION_CHARGE_CANCELED") {
                 mObj.planCanceled += 1;
@@ -121,12 +134,16 @@ export function Overview({ selectedApp = "Passonext", startDate = "", endDate = 
                 if (shopTracker[k] === "ACTIVE") actCount++;
               }
               mObj.totalStores = actCount;
-              mObj.weeklyInstalls = Math.round(mObj.installs / 4) || (mObj.installs > 0 ? 1 : 0);
-              mObj.totalRevenue = Math.round(actCount * 29.99 + mObj.planActivated * 19.99);
-              mObj.customerPortalCount = actCount * 85 + mObj.installs * 12;
+              mObj.weeklyInstalls =
+                Math.round(mObj.installs / 4) || (mObj.installs > 0 ? 1 : 0);
+              mObj.totalRevenue = Math.round(
+                actCount * 29.99 + mObj.planActivated * 19.99,
+              );
             }
 
-            const trends = Object.values(monthsMap).sort((a, b) => b.key.localeCompare(a.key));
+            const trends = Object.values(monthsMap).sort((a, b) =>
+              b.key.localeCompare(a.key),
+            );
             setMonthlyTrends(trends);
           }
         } else {
@@ -169,7 +186,10 @@ export function Overview({ selectedApp = "Passonext", startDate = "", endDate = 
         if (!isMounted) return;
 
         if (json.success && json.data) {
-          if (json.data.monthlyTrends && Array.isArray(json.data.monthlyTrends)) {
+          if (
+            json.data.monthlyTrends &&
+            Array.isArray(json.data.monthlyTrends)
+          ) {
             setMonthlyTrends(json.data.monthlyTrends);
           }
         }
@@ -181,7 +201,9 @@ export function Overview({ selectedApp = "Passonext", startDate = "", endDate = 
     }
 
     refreshChart();
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+    };
   }, [chartRefreshKey, selectedApp, startDate, endDate]);
 
   const handleChartRefresh = () => {
@@ -198,22 +220,33 @@ export function Overview({ selectedApp = "Passonext", startDate = "", endDate = 
 
   const handleNavigateToMerchants = (cardId) => {
     let state;
-    if (cardId === 'installs') {
-      state = { initialStatusFilter: ['installed'] };
-    } else if (cardId === 'uninstalls') {
-      state = { initialStatusFilter: ['uninstalled'] };
-    } else if (cardId === 'planExpired') {
-      state = { initialStatusFilter: ['closed'] };
-    } else if (cardId === 'totalStores') {
-      state = { initialStatusFilter: ['installed', 'reopened'] };
-    } else if (cardId === 'planCanceled') {
-      state = { initialPlanFilter: ['No Plan'] };
-    } else if (cardId === 'planActivated') {
-      state = { initialPlanFilter: ['Starter Monthly ($9)', 'Pro Monthly ($19)', 'Enterprise Yearly ($768)', 'Basic - $8.00 Usd', '1500+ Customers - $9.99', '5001-25000 Customers - $19.99', 'More Than 25000 Customers - $29.99', 'Trial'] };
+    if (cardId === "installs") {
+      state = { initialStatusFilter: ["installed"] };
+    } else if (cardId === "uninstalls") {
+      state = { initialStatusFilter: ["uninstalled"] };
+    } else if (cardId === "planExpired") {
+      state = { initialStatusFilter: ["closed"] };
+    } else if (cardId === "totalStores") {
+      state = { initialStatusFilter: ["installed", "reopened"] };
+    } else if (cardId === "planCanceled") {
+      state = { initialPlanFilter: ["No Plan"] };
+    } else if (cardId === "planActivated") {
+      state = {
+        initialPlanFilter: [
+          "Starter Monthly ($9)",
+          "Pro Monthly ($19)",
+          "Enterprise Yearly ($768)",
+          "Basic - $8.00 Usd",
+          "1500+ Customers - $9.99",
+          "5001-25000 Customers - $19.99",
+          "More Than 25000 Customers - $29.99",
+          "Trial",
+        ],
+      };
     } else {
-      state = { initialStatusFilter: ['installed', 'reopened'] };
+      state = { initialStatusFilter: ["installed", "reopened"] };
     }
-    navigate('/all_stores', { state });
+    navigate("/all_stores", { state });
   };
 
   const cards = [
@@ -222,21 +255,14 @@ export function Overview({ selectedApp = "Passonext", startDate = "", endDate = 
       title: "Total Revenue",
       value: metrics.totalRevenue,
       icon: DollarSign,
-      clickable: false,
-    },
-    {
-      id: "customerPortalCount",
-      title: "Customer Portal Count",
-      value: metrics.customerPortalCount,
-      icon: Activity,
-      clickable: false,
+      clickable: true,
     },
     {
       id: "weeklyInstalls",
       title: "Weekly Installs",
       value: metrics.weeklyInstalls,
       icon: Calendar,
-      clickable: false,
+      clickable: true,
     },
     {
       id: "totalStores",
@@ -307,8 +333,12 @@ export function Overview({ selectedApp = "Passonext", startDate = "", endDate = 
             icon={card.icon}
             isLoading={loading}
             isActive={card.clickable ? selectedMetric === card.id : false}
-            onClick={card.clickable ? () => handleCardClick(card.id) : undefined}
-            onValueClick={card.clickable ? () => handleNavigateToMerchants(card.id) : undefined}
+            onClick={
+              card.clickable ? () => handleCardClick(card.id) : undefined
+            }
+            onValueClick={
+              card.clickable ? () => handleNavigateToMerchants(card.id) : undefined
+            }
           />
         ))}
       </div>

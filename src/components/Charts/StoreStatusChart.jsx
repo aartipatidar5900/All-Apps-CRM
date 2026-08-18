@@ -1,12 +1,21 @@
 import { useEffect, useRef } from 'react';
 import * as echarts from 'echarts';
-import { Store, RefreshCw } from 'lucide-react';
+import { Store } from 'lucide-react';
+import { ChartSkeleton } from '../SkeletonLoader';
 
 const StoreStatusChart = ({ data, loading, error }) => {
   const chartRef = useRef(null);
   const chartInstance = useRef(null);
 
   useEffect(() => {
+    if (loading) {
+      if (chartInstance.current) {
+        chartInstance.current.dispose();
+        chartInstance.current = null;
+      }
+      return;
+    }
+
     if (!data || data.length === 0 || !chartRef.current) return;
 
     if (!chartInstance.current) {
@@ -38,7 +47,7 @@ const StoreStatusChart = ({ data, loading, error }) => {
       grid: {
         left: '2%',
         right: '2%',
-        bottom: '3%',
+        bottom: data.length > 8 ? '12%' : '3%',
         top: '18%',
         containLabel: true,
       },
@@ -47,7 +56,7 @@ const StoreStatusChart = ({ data, loading, error }) => {
         boundaryGap: true,
         data: months,
         axisLine: { lineStyle: { color: '#cbd5e1' } },
-        axisLabel: { color: '#64748b', fontSize: 12, margin: 12 },
+        axisLabel: { color: '#64748b', fontSize: 12, margin: 12, interval: 0 },
       },
       yAxis: {
         type: 'value',
@@ -56,6 +65,46 @@ const StoreStatusChart = ({ data, loading, error }) => {
         splitLine: { lineStyle: { type: 'dashed', color: '#f1f5f9' } },
         axisLabel: { color: '#64748b' },
       },
+      dataZoom: [
+        {
+          type: "slider",
+          show: data.length > 8,
+          xAxisIndex: [0],
+          left: "2%",
+          right: "2%",
+          bottom: 4,
+          height: 14,
+          start: 0,
+          end: data.length > 8 ? Math.round((8 / data.length) * 100) : 100,
+          zoomLock: true,
+          borderColor: "transparent",
+          backgroundColor: "#f1f5f9",
+          fillerColor: "#cbd5e1",
+          showDetail: false,
+          showDataShadow: false,
+          brushSelect: false,
+          handleIcon: "roundRect",
+          handleSize: "100%",
+          handleStyle: {
+            color: "#94a3b8",
+            borderColor: "transparent",
+            borderRadius: 3,
+          },
+          moveHandleSize: 6,
+          moveHandleStyle: {
+            color: "#64748b",
+          },
+          borderRadius: 6,
+        },
+        {
+          type: "inside",
+          xAxisIndex: [0],
+          zoomLock: true,
+          zoomOnMouseWheel: false,
+          moveOnMouseMove: true,
+          moveOnMouseWheel: true,
+        },
+      ],
       series: [
         {
           name: 'Installed Stores',
@@ -99,7 +148,7 @@ const StoreStatusChart = ({ data, loading, error }) => {
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [data]);
+  }, [data, loading]);
 
   useEffect(() => {
     return () => {
@@ -109,6 +158,18 @@ const StoreStatusChart = ({ data, loading, error }) => {
       }
     };
   }, []);
+
+  if (loading) {
+    return (
+      <ChartSkeleton
+        height="h-72"
+        showTitle={true}
+        titleWidth="w-56"
+        subtitleWidth="w-64"
+        type="bar"
+      />
+    );
+  }
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col justify-between h-full">
@@ -122,11 +183,7 @@ const StoreStatusChart = ({ data, loading, error }) => {
         </div>
       </div>
 
-      {loading ? (
-        <div className="h-72 flex items-center justify-center">
-          <RefreshCw className="w-6 h-6 animate-spin text-indigo-600" />
-        </div>
-      ) : error ? (
+      {error ? (
         <div className="h-72 flex items-center justify-center text-xs text-rose-600">
           {error}
         </div>
@@ -142,3 +199,4 @@ const StoreStatusChart = ({ data, loading, error }) => {
 };
 
 export default StoreStatusChart;
+

@@ -8,7 +8,7 @@ const MonthlyDiscountChart = () => {
   const data = mockMonthlyTrends;
 
   return (
-    <div className="mb-6">
+    <div className="space-y-6 mb-6">
       <StoreStatusChart data={data} loading={loading} error={error} />
       <DiscountCreationChart data={data} loading={loading} error={error} />
     </div>

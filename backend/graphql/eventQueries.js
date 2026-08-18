@@ -14,7 +14,9 @@ export const GET_APP_EVENTS_QUERY = `
             occurredAt
             shop {
               id
+              name
               myshopifyDomain
+              avatarUrl
             }
             ... on SubscriptionChargeActivated {
               charge {
@@ -104,3 +106,35 @@ export const GET_APP_EVENTS_QUERY = `
   }
 `;
 
+export const ACTIVE_SUBSCRIPTION_QUERY = `
+  query ActiveSubscription($appId: ID!, $shopId: ID!) {
+    activeSubscription(appId: $appId, shopId: $shopId) {
+      billingPeriod
+      trialEndsAt
+      cancelAtEndOfCycle
+
+      items {
+        handle
+        description
+        price {
+          __typename
+          active
+          currency
+
+          ... on FlatRatePrice {
+            amount
+          }
+
+          ... on TieredPrice {
+            tiersMode
+            tiers {
+              upTo
+              amountPerUnit
+              amount
+            }
+          }
+        }
+      }
+    }
+  }
+`;

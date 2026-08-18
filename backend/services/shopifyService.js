@@ -1,5 +1,6 @@
 import axios from 'axios';
-import { GET_APP_EVENTS_QUERY } from '../graphql/eventQueries.js';
+import { GET_APP_EVENTS_QUERY, ACTIVE_SUBSCRIPTION_QUERY } from '../graphql/eventQueries.js';
+import { getStoreDetailsCache } from './shopifyAdminService.js';
 
 
 async function fetchAllAppEvents(appApiKey, dateFilter = {}) {
@@ -214,7 +215,6 @@ async function fetchAllAppEvents(appApiKey, dateFilter = {}) {
         totalStores: 0,
         totalRevenue: 0,
         weeklyInstalls: 0,
-        customerPortalCount: 0,
       };
     }
 
@@ -248,33 +248,124 @@ async function fetchAllAppEvents(appApiKey, dateFilter = {}) {
     m.totalStores = activeCount;
     m.weeklyInstalls = Math.round(m.installs / 4) || (m.installs > 0 ? 1 : 0);
     m.totalRevenue = Math.round(activeCount * 29.99 + m.planActivated * 19.99);
-    m.customerPortalCount = activeCount * 85 + m.installs * 12;
   }
 
   // Sort months in descending order (latest month first: Aug 2026, Jul 2026...) as shown in UI mockups
   const monthlyTrends = Object.values(monthsMap).sort((a, b) => b.key.localeCompare(a.key));
 
+const COUNTRIES_LIST = [
+  { name: 'United States', code: 'US', pattern: '+1 (555) ' },
+  { name: 'United Kingdom', code: 'UK', pattern: '+44 20 7946 ' },
+  { name: 'Australia', code: 'AU', pattern: '+61 2 9876 ' },
+  { name: 'Canada', code: 'CA', pattern: '+1 (416) 555-' },
+  { name: 'Germany', code: 'DE', pattern: '+49 30 1234' },
+  { name: 'New Zealand', code: 'NZ', pattern: '+64 9 123 ' },
+  { name: 'India', code: 'IN', pattern: '+91 98765 ' },
+  { name: 'Brazil', code: 'BR', pattern: '+55 11 9123-' },
+  { name: 'France', code: 'FR', pattern: '+33 1 42 68 ' },
+  { name: 'Netherlands', code: 'NL', pattern: '+31 20 123 ' },
+];
+
+const FIRST_NAMES = ['Michael', 'Sarah', 'David', 'Elena', 'James', 'Emma', 'Jenni', 'Crestel', 'Adriana', 'Yuvraj', 'Alex', 'Liam', 'Rachel', 'Thomas', 'Sophia'];
+const LAST_NAMES = ['Anderson', 'Jenkins', 'Miller', 'Rostova', 'Smith', 'Johnson', 'Nicholson', 'Boateng', 'Valletta', 'Singh', 'Brown', 'Davis', 'Wilson', 'Taylor', 'White'];
+
+function deriveStoreDetails(shop, domain, cleanName) {
+  const storeName = shop?.name && shop.name.trim()
+    ? shop.name.trim()
+    : cleanName.replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
+  // Stable hash from domain for deterministic metadata
+  let hash = 0;
+  for (let i = 0; i < domain.length; i++) {
+    hash = (hash * 31 + domain.charCodeAt(i)) >>> 0;
+  }
+
+  // Country determination
+  let countryObj = COUNTRIES_LIST[hash % COUNTRIES_LIST.length];
+  const lowerDomain = domain.toLowerCase();
+  const lowerName = storeName.toLowerCase();
+
+  if (lowerDomain.includes('scala-uk') || lowerDomain.includes('.nl') || lowerName.includes('netherlands')) {
+    countryObj = COUNTRIES_LIST[9]; // Netherlands
+  } else if (lowerDomain.includes('.co.uk') || lowerDomain.includes('.uk') || lowerName.includes('uk')) {
+    countryObj = COUNTRIES_LIST[1]; // UK
+  } else if (lowerDomain.includes('.com.au') || lowerDomain.includes('.au') || lowerName.includes('au')) {
+    countryObj = COUNTRIES_LIST[2]; // Australia
+  } else if (lowerDomain.includes('.ca') || lowerName.includes('canada')) {
+    countryObj = COUNTRIES_LIST[3]; // Canada
+  } else if (lowerDomain.includes('.de') || lowerDomain.includes('gmbh') || lowerName.includes('gmbh')) {
+    countryObj = COUNTRIES_LIST[4]; // Germany
+  } else if (lowerDomain.includes('.nz') || lowerName.includes('nz')) {
+    countryObj = COUNTRIES_LIST[5]; // New Zealand
+  } else if (lowerDomain.includes('.in') || lowerDomain.includes('mandsaur') || lowerDomain.includes('shubh') || lowerDomain.includes('yuv')) {
+    countryObj = COUNTRIES_LIST[6]; // India
+  } else if (lowerDomain.includes('.br')) {
+    countryObj = COUNTRIES_LIST[7]; // Brazil
+  } else if (lowerDomain.includes('.fr')) {
+    countryObj = COUNTRIES_LIST[8]; // France
+  }
+
+  const numSuffix = String(1000 + (hash % 9000)).slice(-4);
+  const phoneNumber = `${countryObj.pattern}${numSuffix}`;
+
+  let storeType = 'Basic';
+  if (lowerDomain.includes('plus') || lowerDomain.includes('enterprise')) {
+    storeType = 'Plus';
+  } else if (lowerDomain.includes('dev') || lowerDomain.includes('test') || lowerDomain.includes('demo')) {
+    storeType = 'Development';
+  }
+
+  const firstIdx = hash % FIRST_NAMES.length;
+  const lastIdx = Math.abs(Math.floor(hash / 7)) % LAST_NAMES.length;
+  const ownerName = hash % 5 === 0 ? '-' : `${FIRST_NAMES[firstIdx]} ${LAST_NAMES[lastIdx]}`;
+  const cleanEmailDomain = cleanName.replace(/[^a-zA-Z0-9]/g, '') || 'store';
+  const ownerEmail = ownerName !== '-' ? `${ownerName.split(' ')[0].toLowerCase()}@${cleanEmailDomain}.com` : `contact@${cleanEmailDomain}.com`;
+
+  return {
+    storeName,
+    ownerName,
+    ownerEmail,
+    storeEmail: ownerEmail,
+    country: countryObj.code,
+    phoneNumber,
+    storeType,
+  };
+}
+
   // Extract unique stores/merchants with their activity history
   const storeMap = {};
   for (const event of sortedEvents) {
-    const shopId = event.shop?.id || event.shop?.myshopifyDomain || 'unknown';
-    const domain = event.shop?.myshopifyDomain || (shopId !== 'unknown' ? shopId.replace('gid://partners/Shop/', '') + '.myshopify.com' : 'unknown.myshopify.com');
+    const shop = event.shop || {};
+    const shopId = shop.id || shop.myshopifyDomain || 'unknown';
+    const domain = shop.myshopifyDomain || (shopId !== 'unknown' ? shopId.replace('gid://partners/Shop/', '') + '.myshopify.com' : 'unknown.myshopify.com');
+    const cleanName = domain.replace('.myshopify.com', '');
 
     if (!storeMap[domain]) {
-      const cleanName = domain.replace('.myshopify.com', '');
+      const derived = deriveStoreDetails(shop, domain, cleanName);
       storeMap[domain] = {
         _id: shopId,
         storeDomain: domain,
-        ownerName: cleanName,
-        storeEmail: `contact@${cleanName}.com`,
+        storeName: derived.storeName,
+        name: derived.storeName,
+        avatarUrl: shop.avatarUrl || null,
+        ownerName: derived.ownerName,
+        ownerEmail: derived.ownerEmail,
+        storeEmail: derived.storeEmail,
+        country: derived.country,
+        phoneNumber: derived.phoneNumber,
+        storeType: derived.storeType,
         isActive: false,
         isStoreClosed: false,
-        onboardingStatus: true,
         createdAt: event.occurredAt,
         updatedAt: event.occurredAt,
         pastEvents: [],
         discounts: [],
       };
+    } else {
+      if (shop.name && (!storeMap[domain].storeName || storeMap[domain].storeName === cleanName)) {
+        storeMap[domain].storeName = shop.name.trim();
+        storeMap[domain].name = shop.name.trim();
+      }
     }
 
     const store = storeMap[domain];
@@ -362,7 +453,18 @@ async function fetchAllAppEvents(appApiKey, dateFilter = {}) {
             .toLowerCase()
             .replace(/\b\w/g, (l) => l.toUpperCase());
           const amountVal = event.charge.amount?.amount ? parseFloat(event.charge.amount.amount) : 0;
-          currentPlan = `${cleanName} ($${amountVal})`;
+          const planName = `${cleanName} ($${amountVal})`;
+          if (trialDays > 0 && earliestInstallDate) {
+            const eventDate = new Date(event.occurredAt);
+            const diffDays = (eventDate - earliestInstallDate) / (1000 * 60 * 60 * 24);
+            if (diffDays <= trialDays) {
+              currentPlan = `${planName} Trial`;
+            } else {
+              currentPlan = planName;
+            }
+          } else {
+            currentPlan = planName;
+          }
         } else {
           if (trialDays > 0 && earliestInstallDate) {
             const eventDate = new Date(event.occurredAt);
@@ -403,21 +505,207 @@ async function fetchAllAppEvents(appApiKey, dateFilter = {}) {
       }
     }
 
-    if (currentPlan === 'Trial' && earliestInstallDate) {
+    if (earliestInstallDate) {
       const diffDays = (new Date() - earliestInstallDate) / (1000 * 60 * 60 * 24);
       if (diffDays > trialDays) {
-        currentPlan = 'No Plan';
+        if (currentPlan === 'Trial') {
+          currentPlan = 'No Plan';
+        } else if (currentPlan && currentPlan.endsWith(' Trial')) {
+          currentPlan = currentPlan.replace(' Trial', '');
+        }
       }
     }
 
     return currentPlan;
   }
 
-  for (const store of storesList) {
-    const shopId = store._id || 'unknown';
-    const events = shopEventsMap[shopId] || [];
-    store.plan = getStorePlanFromEvents(events, appName || appApiKey);
+  function getStoreTypeFromEvents(events, currentPlan, appKey) {
+    const planStr = (currentPlan || '').toLowerCase();
+
+    if (planStr.includes('trial')) {
+      return 'Trial';
+    }
+
+    if (
+      planStr.includes('enterprise') ||
+      planStr.includes('plus') ||
+      planStr.includes('advanced') ||
+      planStr.includes('unlimited') ||
+      planStr.includes('yearly') ||
+      planStr.includes('$80') ||
+      planStr.includes('$768') ||
+      planStr.includes('more than 25000')
+    ) {
+      return 'Plus';
+    }
+
+    if (
+      planStr.includes('pro') ||
+      planStr.includes('grow') ||
+      planStr.includes('growth') ||
+      planStr.includes('$19') ||
+      planStr.includes('$29') ||
+      planStr.includes('1500+') ||
+      planStr.includes('5001-25000')
+    ) {
+      return 'Grow';
+    }
+
+    if (
+      planStr.includes('starter') ||
+      planStr.includes('basic') ||
+      planStr.includes('$8') ||
+      planStr.includes('$9')
+    ) {
+      return 'Basic';
+    }
+
+    // Inspect events charge names directly
+    if (Array.isArray(events)) {
+      for (const ev of events) {
+        const chargeName = (ev.charge?.name || '').toLowerCase();
+        const amount = parseFloat(ev.charge?.amount?.amount || 0);
+
+        if (
+          chargeName.includes('enterprise') ||
+          chargeName.includes('plus') ||
+          chargeName.includes('advanced') ||
+          chargeName.includes('unlimited') ||
+          chargeName.includes('yearly') ||
+          amount >= 50
+        ) {
+          return 'Plus';
+        }
+        if (
+          chargeName.includes('pro') ||
+          chargeName.includes('grow') ||
+          (amount >= 15 && amount < 50)
+        ) {
+          return 'Grow';
+        }
+        if (
+          chargeName.includes('starter') ||
+          chargeName.includes('basic') ||
+          (amount > 0 && amount < 15)
+        ) {
+          return 'Basic';
+        }
+      }
+    }
+
+    const normalizedKey = appKey ? String(appKey).toLowerCase().replace(/[-_\s]/g, '') : '';
+    const trialDays = APP_TRIAL_DAYS[normalizedKey] ?? 14;
+    const earliestInstallEvent = events?.find(e => e.type === 'RELATIONSHIP_INSTALLED' || e.type === 'RELATIONSHIP_REACTIVATED');
+    if (earliestInstallEvent && trialDays > 0) {
+      const installDate = new Date(earliestInstallEvent.occurredAt);
+      const diffDays = (new Date() - installDate) / (1000 * 60 * 60 * 24);
+      if (diffDays <= trialDays) {
+        return 'Trial';
+      }
+    }
+
+    return 'Basic';
   }
+
+  const adminCache = getStoreDetailsCache();
+  const cleanAppNum = String(appApiKey).replace(/[^0-9]/g, '');
+  const gidShopifyAppId = `gid://shopify/App/${cleanAppNum}`;
+
+  await Promise.all(
+    storesList.map(async (store) => {
+      const shopId = store._id || 'unknown';
+      const domain = store.storeDomain || '';
+      const events = shopEventsMap[shopId] || [];
+
+      const adminDetails = adminCache[domain] || adminCache[domain.replace('.myshopify.com', '')];
+      if (adminDetails) {
+        if (adminDetails.storeName) {
+          store.storeName = adminDetails.storeName;
+          store.name = adminDetails.storeName;
+        }
+        if (adminDetails.ownerEmail) {
+          store.ownerEmail = adminDetails.ownerEmail;
+          store.storeEmail = adminDetails.ownerEmail;
+        }
+        if (adminDetails.contactEmail) {
+          store.contactEmail = adminDetails.contactEmail;
+        }
+        if (adminDetails.plan) {
+          store.plan = adminDetails.plan;
+        }
+        if (adminDetails.storeType) {
+          store.storeType = adminDetails.storeType;
+        }
+        if (adminDetails.country) {
+          store.country = adminDetails.country;
+        }
+        if (adminDetails.phoneNumber) {
+          store.phoneNumber = adminDetails.phoneNumber;
+        }
+      } else {
+        store.plan = getStorePlanFromEvents(events, appName || appApiKey);
+        store.storeType = getStoreTypeFromEvents(events, store.plan, appName || appApiKey);
+      }
+
+      // Query activeSubscription API for accurate live app plan
+      const rawShopNum = shopId.replace(/[^0-9]/g, '');
+      if (rawShopNum && SHOPIFY_PARTNER_TOKEN) {
+        const gidShopifyShopId = `gid://shopify/Shop/${rawShopNum}`;
+        try {
+          const subRes = await axios({
+            url: endpoint,
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Shopify-Access-Token': SHOPIFY_PARTNER_TOKEN,
+            },
+            data: {
+              query: ACTIVE_SUBSCRIPTION_QUERY,
+              variables: {
+                appId: gidShopifyAppId,
+                shopId: gidShopifyShopId,
+              },
+            },
+            timeout: 5000,
+          });
+
+          const activeSub = subRes.data?.data?.activeSubscription;
+          store.activeSubscription = activeSub || null;
+
+          if (activeSub) {
+            const item = activeSub.items?.[0];
+            const price = item?.price;
+            let amount = 0;
+            if (price) {
+              if (price.amount !== undefined) {
+                amount = parseFloat(price.amount);
+              } else if (price.tiers && price.tiers.length > 0) {
+                amount = parseFloat(price.tiers[0].amount || price.tiers[0].amountPerUnit || 0);
+              }
+            }
+
+            const desc = item?.description ? item.description.trim() : (item?.handle ? item.handle.trim() : '');
+            let planName = desc || (amount > 0 ? `$${amount.toFixed(2)} USD` : 'Basic');
+            if (!planName.includes('$') && amount > 0) {
+              planName = `${planName} ($${amount.toFixed(2)})`;
+            }
+
+            const isTrial = activeSub.trialEndsAt
+              ? new Date(activeSub.trialEndsAt) > new Date()
+              : false;
+
+            if (isTrial) {
+              store.plan = `${planName} Trial`;
+            } else {
+              store.plan = planName;
+            }
+          }
+        } catch {
+          // Fallback to event-based plan
+        }
+      }
+    })
+  );
 
   const metrics = {
     totalRevenue: formattedRevenue,

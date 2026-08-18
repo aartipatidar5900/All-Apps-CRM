@@ -109,3 +109,101 @@ export const TableSkeleton = () => {
     </div>
   );
 };
+
+export const ChartSkeleton = ({
+  height = "h-80",
+  showTitle = true,
+  titleWidth = "w-48",
+  subtitleWidth = "w-72",
+  type = "bar", // "bar" | "line"
+}) => {
+  return (
+    <div className="w-full bg-white border border-slate-200/90 rounded-2xl md:rounded-3xl p-6 md:p-8 shadow-xs animate-pulse">
+      {/* Header Skeleton */}
+      {showTitle && (
+        <div className="flex items-start justify-between mb-6">
+          <div className="space-y-2">
+            <div className={`h-6 ${titleWidth} bg-slate-200 rounded-lg`} />
+            <div className={`h-3.5 ${subtitleWidth} bg-slate-100 rounded-md`} />
+          </div>
+          <div className="h-9 w-9 bg-slate-100 rounded-xl" />
+        </div>
+      )}
+
+      {/* Chart Plot Area Skeleton */}
+      <div
+        className={`${height} w-full bg-slate-50/70 rounded-2xl p-6 flex flex-col justify-between border border-slate-100 relative overflow-hidden`}
+      >
+        {/* Dashed Grid Lines */}
+        <div className="absolute inset-x-6 top-6 bottom-14 flex flex-col justify-between pointer-events-none opacity-40">
+          <div className="border-b border-dashed border-slate-300 w-full" />
+          <div className="border-b border-dashed border-slate-300 w-full" />
+          <div className="border-b border-dashed border-slate-300 w-full" />
+          <div className="border-b border-dashed border-slate-300 w-full" />
+        </div>
+
+        {/* Dynamic Skeleton Content */}
+        {type === "line" ? (
+          <div className="flex-1 flex items-center justify-center z-10 relative">
+            <svg
+              className="w-full h-full text-slate-200/70"
+              viewBox="0 0 500 150"
+              preserveAspectRatio="none"
+            >
+              <path
+                d="M0,120 Q60,40 120,90 T240,50 T360,110 T500,30 L500,150 L0,150 Z"
+                fill="currentColor"
+                opacity="0.3"
+              />
+              <path
+                d="M0,120 Q60,40 120,90 T240,50 T360,110 T500,30"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="4"
+                className="text-slate-300"
+              />
+            </svg>
+          </div>
+        ) : (
+          <div className="flex-1 flex items-end justify-between gap-2 sm:gap-4 md:gap-6 z-10 px-2 pb-2">
+            {[
+              { h1: "h-36", h2: "h-24" },
+              { h1: "h-48", h2: "h-32" },
+              { h1: "h-28", h2: "h-44" },
+              { h1: "h-56", h2: "h-36" },
+              { h1: "h-40", h2: "h-20" },
+              { h1: "h-52", h2: "h-48" },
+              { h1: "h-32", h2: "h-28" },
+              { h1: "h-60", h2: "h-40" },
+            ].map((bar, idx) => (
+              <div
+                key={idx}
+                className="flex-1 flex items-end justify-center gap-1 max-w-12 h-full"
+              >
+                <div
+                  className={`${bar.h1} w-full bg-slate-200/80 rounded-t-md`}
+                />
+                <div
+                  className={`${bar.h2} w-full bg-slate-200/50 rounded-t-md`}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* X-Axis labels placeholder */}
+        <div className="flex justify-between gap-2 sm:gap-4 md:gap-6 pt-3 border-t border-slate-200/60 z-10 px-2">
+          {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug"].map(
+            (_, idx) => (
+              <div
+                key={idx}
+                className="h-3 w-8 bg-slate-200/80 rounded-sm mx-auto"
+              />
+            ),
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+

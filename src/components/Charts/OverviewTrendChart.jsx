@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
 import { RefreshCw } from "lucide-react";
+import { ChartSkeleton } from "../SkeletonLoader";
 
 // Configuration for each metric card when clicked
 const METRIC_CONFIGS = {
@@ -33,14 +34,6 @@ const METRIC_CONFIGS = {
     dataKey: "totalRevenue",
     name: "Total Revenue",
     isCurrency: true,
-  },
-  customerPortalCount: {
-    title: "Customer Portal Count Trend",
-    subtitle:
-      "Time series trend of customer portal counts across all historical periods",
-    color: "#8b5cf6", // Violet
-    dataKey: "customerPortalCount",
-    name: "Customer Portal Count",
   },
   weeklyInstalls: {
     title: "Weekly Installs Trend",
@@ -115,7 +108,15 @@ export default function OverviewTrendChart({
     : "Time series trend of installations and uninstallations across all historical periods";
 
   useEffect(() => {
-    if (loading || !chartRef.current || !data || data.length === 0) return;
+    if (loading) {
+      if (chartInstance.current) {
+        chartInstance.current.dispose();
+        chartInstance.current = null;
+      }
+      return;
+    }
+
+    if (!chartRef.current || !data || data.length === 0) return;
 
     if (!chartInstance.current) {
       chartInstance.current = echarts.init(chartRef.current);
@@ -243,7 +244,7 @@ export default function OverviewTrendChart({
       grid: {
         left: "2%",
         right: "2%",
-        bottom: "12%",
+        bottom: data.length > 8 ? "12%" : "3%",
         top: "14%",
         containLabel: true,
       },
@@ -256,7 +257,6 @@ export default function OverviewTrendChart({
           color: "#64748b",
           fontSize: 11,
           margin: 14,
-          interval: 0,
         },
       },
       yAxis: {
@@ -282,14 +282,15 @@ export default function OverviewTrendChart({
       dataZoom: [
         {
           type: "slider",
-          show: true,
+          show: data.length > 8,
           xAxisIndex: [0],
-          left: "15%",
-          right: "15%",
+          left: "2%",
+          right: "2%",
           bottom: 4,
           height: 14,
           start: 0,
           end: data.length > 8 ? Math.round((8 / data.length) * 100) : 100,
+          zoomLock: true,
           borderColor: "transparent",
           backgroundColor: "#f1f5f9",
           fillerColor: "#cbd5e1",
@@ -303,12 +304,16 @@ export default function OverviewTrendChart({
             borderColor: "transparent",
             borderRadius: 3,
           },
-          moveHandleSize: 0,
-          borderRadius: 4,
+          moveHandleSize: 6,
+          moveHandleStyle: {
+            color: "#64748b",
+          },
+          borderRadius: 6,
         },
         {
           type: "inside",
           xAxisIndex: [0],
+          zoomLock: true,
           zoomOnMouseWheel: false,
           moveOnMouseMove: true,
           moveOnMouseWheel: true,
@@ -338,26 +343,29 @@ export default function OverviewTrendChart({
     };
   }, []);
 
+  if (loading) {
+    return (
+      <ChartSkeleton
+        height="h-80"
+        showTitle={true}
+        titleWidth="w-52"
+        subtitleWidth="w-80"
+        type="bar"
+      />
+    );
+  }
+
   return (
     <div className="bg-white border border-slate-200/90 rounded-2xl md:rounded-3xl p-6 md:p-8 shadow-xs relative transition-all duration-300">
       {/* Header with Title, Subtitle, and Refresh Button */}
       <div className="flex items-start justify-between mb-4">
         <div>
-          {loading ? (
-            <div className="space-y-2">
-              <div className="h-6 w-48 bg-slate-200/80 rounded animate-pulse" />
-              <div className="h-3.5 w-80 bg-slate-100 rounded animate-pulse" />
-            </div>
-          ) : (
-            <div>
-              <h2 className="text-lg md:text-xl font-bold text-slate-900 leading-tight">
-                {chartTitle}
-              </h2>
-              <p className="text-xs md:text-sm text-slate-400 font-normal mt-1">
-                {chartSubtitle}
-              </p>
-            </div>
-          )}
+          <h2 className="text-lg md:text-xl font-bold text-slate-900 leading-tight">
+            {chartTitle}
+          </h2>
+          <p className="text-xs md:text-sm text-slate-400 font-normal mt-1">
+            {chartSubtitle}
+          </p>
         </div>
 
         <button
@@ -373,22 +381,8 @@ export default function OverviewTrendChart({
         </button>
       </div>
 
-      {/* Chart Canvas or Skeleton State */}
-      {loading ? (
-        <div className="h-80 w-full bg-slate-50/60 rounded-2xl p-6 flex items-end justify-around gap-3 border border-slate-100">
-          <div className="h-36 bg-slate-200/70 rounded-t-lg flex-1 max-w-10 animate-pulse" />
-          <div className="h-24 bg-slate-200/70 rounded-t-lg flex-1 max-w-10 animate-pulse" />
-          <div className="h-56 bg-slate-200/70 rounded-t-lg flex-1 max-w-10 animate-pulse" />
-          <div className="h-16 bg-slate-200/70 rounded-t-lg flex-1 max-w-10 animate-pulse" />
-          <div className="h-44 bg-slate-200/70 rounded-t-lg flex-1 max-w-10 animate-pulse" />
-          <div className="h-52 bg-slate-200/70 rounded-t-lg flex-1 max-w-10 animate-pulse" />
-          <div className="h-28 bg-slate-200/70 rounded-t-lg flex-1 max-w-10 animate-pulse" />
-          <div className="h-40 bg-slate-200/70 rounded-t-lg flex-1 max-w-10 animate-pulse" />
-          <div className="h-48 bg-slate-200/70 rounded-t-lg flex-1 max-w-10 animate-pulse" />
-          <div className="h-20 bg-slate-200/70 rounded-t-lg flex-1 max-w-10 animate-pulse" />
-          <div className="h-60 bg-slate-200/70 rounded-t-lg flex-1 max-w-10 animate-pulse" />
-        </div>
-      ) : error ? (
+      {/* Chart Canvas or States */}
+      {error ? (
         <div className="h-80 flex items-center justify-center text-sm text-rose-600 bg-rose-50/40 rounded-2xl border border-rose-100">
           {error}
         </div>
@@ -402,3 +396,4 @@ export default function OverviewTrendChart({
     </div>
   );
 }
+

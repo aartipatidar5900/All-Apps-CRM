@@ -137,13 +137,16 @@ function NavigationBar({
 
 function App() {
   const [totalStoresCount, setTotalStoresCount] = useState(0);
-  const [selectedApp, setSelectedApp] = useState("Passonext");
+  const [selectedApp, setSelectedApp] = useState(() => {
+    return localStorage.getItem("selected_crm_app") || "Passonext";
+  });
   const [datePreset, setDatePreset] = useState("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
   const handleSelectApp = (app) => {
     setSelectedApp(app);
+    localStorage.setItem("selected_crm_app", app);
     setDatePreset("all");
     setStartDate("");
     setEndDate("");
