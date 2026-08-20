@@ -2,8 +2,77 @@ import axios from 'axios';
 import { GET_APP_EVENTS_QUERY, ACTIVE_SUBSCRIPTION_QUERY } from '../graphql/eventQueries.js';
 import { getStoreDetailsCache } from './shopifyAdminService.js';
 
+// In-memory cache for app events data
+const appEventsCache = new Map();
+const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
 
-async function fetchAllAppEvents(appApiKey, dateFilter = {}) {
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Robust GraphQL executor with exponential backoff for 429 (Rate Limit) and network errors
+ */
+async function executePartnerGraphQLWithRetry(url, token, query, variables, maxRetries = 4) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await axios({
+        url,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Access-Token': token,
+        },
+        data: { query, variables },
+        timeout: 30000,
+      });
+
+      if (response.data.errors) {
+        throw new Error(JSON.stringify(response.data.errors));
+      }
+
+      return response.data;
+    } catch (error) {
+      const status = error.response?.status;
+      const isRateLimit =
+        status === 429 ||
+        error.message?.includes('429') ||
+        error.message?.includes('THROTTLED') ||
+        error.message?.includes('Throttled');
+      const isNetworkError =
+        error.code === 'ECONNRESET' ||
+        error.code === 'ETIMEDOUT' ||
+        error.code === 'ECONNABORTED';
+
+      if ((isRateLimit || isNetworkError) && attempt < maxRetries) {
+        const retryAfterHeader = error.response?.headers?.['retry-after'];
+        let waitTime = retryAfterHeader
+          ? parseInt(retryAfterHeader, 10) * 1000
+          : Math.min(1000 * Math.pow(2, attempt - 1), 6000);
+        if (isNaN(waitTime) || waitTime <= 0) waitTime = 1500 * attempt;
+
+        console.warn(
+          `[Shopify Partner API] Rate limited (429) or network issue on attempt ${attempt}/${maxRetries}. Retrying in ${waitTime}ms...`
+        );
+        await sleep(waitTime);
+        continue;
+      }
+
+      throw error;
+    }
+  }
+}
+
+async function fetchAllAppEvents(appApiKey, dateFilter = {}, forceRefresh = false) {
+  const cacheKey = `${appApiKey}_${dateFilter.startDate || ''}_${dateFilter.endDate || ''}`;
+  const currentTime = Date.now();
+
+  // Return cached result if fresh and not explicitly forced
+  if (!forceRefresh && appEventsCache.has(cacheKey)) {
+    const cached = appEventsCache.get(cacheKey);
+    if (currentTime - cached.timestamp < CACHE_TTL_MS) {
+      return cached.data;
+    }
+  }
+
   const SHOPIFY_PARTNER_TOKEN = process.env.SHOPIFY_PARTNER_TOKEN;
   const SHOPIFY_ORGANIZATION_ID = process.env.SHOPIFY_ORGANIZATION_ID;
 
@@ -19,45 +88,48 @@ async function fetchAllAppEvents(appApiKey, dateFilter = {}) {
     ? appApiKey
     : `gid://partners/App/${appApiKey}`;
 
-  while (hasNextPage) {
-    const response = await axios({
-      url: endpoint,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Shopify-Access-Token': SHOPIFY_PARTNER_TOKEN,
-      },
-      data: {
-        query: GET_APP_EVENTS_QUERY,
-        variables: {
+  try {
+    while (hasNextPage) {
+      const responseData = await executePartnerGraphQLWithRetry(
+        endpoint,
+        SHOPIFY_PARTNER_TOKEN,
+        GET_APP_EVENTS_QUERY,
+        {
           appId: gidAppId,
           after: after,
-        },
-      },
-    });
+        }
+      );
 
-    if (response.data.errors) {
-      throw new Error(JSON.stringify(response.data.errors));
+      const appData = responseData.data?.app;
+      if (!appData) {
+        throw new Error(`App with ID ${gidAppId} not found.`);
+      }
+
+      appName = appData.name;
+      const eventsData = appData.events;
+      const edges = eventsData.edges || [];
+
+      totalCount += edges.length;
+      allEvents.push(...edges.map((edge) => edge.node));
+
+      hasNextPage = eventsData.pageInfo.hasNextPage;
+      if (edges.length > 0) {
+        after = edges[edges.length - 1].cursor;
+        // Small 50ms pause between pagination requests to avoid burst rate limits
+        if (hasNextPage) await sleep(50);
+      } else {
+        hasNextPage = false;
+      }
     }
-
-    const appData = response.data.data?.app;
-    if (!appData) {
-      throw new Error(`App with ID ${gidAppId} not found.`);
+  } catch (error) {
+    // If Shopify fails (e.g. rate limits exhausted) but we have stale cached data, serve stale data gracefully
+    if (appEventsCache.has(cacheKey)) {
+      console.warn(
+        `[Shopify API Warning] Serving stale cached data for ${appApiKey} due to: ${error.message}`
+      );
+      return appEventsCache.get(cacheKey).data;
     }
-
-    appName = appData.name;
-    const eventsData = appData.events;
-    const edges = eventsData.edges || [];
-
-    totalCount += edges.length;
-    allEvents.push(...edges.map(edge => edge.node));
-
-    hasNextPage = eventsData.pageInfo.hasNextPage;
-    if (edges.length > 0) {
-      after = edges[edges.length - 1].cursor;
-    } else {
-      hasNextPage = false;
-    }
+    throw error;
   }
 
   // Apply date range filter if provided
@@ -117,21 +189,6 @@ async function fetchAllAppEvents(appApiKey, dateFilter = {}) {
     }
   }
 
-  // Check last event for each shop
-  for (const shopId in shopEventsMap) {
-    const events = shopEventsMap[shopId];
-    if (events.length > 0) {
-      const lastEvent = events[events.length - 1];
-      if (lastEvent.type === 'SUBSCRIPTION_CHARGE_CANCELED') {
-        const previousEvent = events.length > 1 ? events[events.length - 2] : null;
-        if (previousEvent && previousEvent.type === 'RELATIONSHIP_UNINSTALLED') {
-          lastEvent.type = 'RELATIONSHIP_UNINSTALLED';
-        } else {
-          lastEvent.type = 'RELATIONSHIP_INSTALLED';
-        }
-      }
-    }
-  }
 
   const shopCurrentStatus = {};
 
@@ -232,7 +289,6 @@ async function fetchAllAppEvents(appApiKey, dateFilter = {}) {
       m.planActivated += 1;
     } else if (type === 'SUBSCRIPTION_CHARGE_EXPIRED' || type === 'ONE_TIME_CHARGE_EXPIRED') {
       m.planExpired += 1;
-      console.log(`[Plan Expired] Type: ${type} | Shop: ${event.shop?.myshopifyDomain || shopId} | Date: ${event.occurredAt} | Month: ${monthLabel}`);
     } else if (type === 'SUBSCRIPTION_CHARGE_CANCELED') {
       m.planCanceled += 1;
     } else if (type === 'SUBSCRIPTION_CHARGE_UNFROZEN') {
@@ -439,79 +495,66 @@ function deriveStoreDetails(shop, domain, cleanName) {
 
     for (const event of events) {
       const type = event.type;
-      if (
+      
+      if (event.charge && event.charge.name) {
+        const rawName = event.charge.name;
+        const cleanName = rawName
+          .replace(/_/g, ' ')
+          .replace(/-/g, ' ')
+          .toLowerCase()
+          .replace(/\b\w/g, (l) => l.toUpperCase());
+        const amountVal = event.charge.amount?.amount ? parseFloat(event.charge.amount.amount) : 0;
+        const formattedAmount = amountVal > 0 ? (amountVal % 1 === 0 ? `$${amountVal}` : `$${amountVal.toFixed(2)}`) : '';
+        const planName = formattedAmount ? `${cleanName} (${formattedAmount})` : cleanName;
+
+        if (trialDays > 0 && earliestInstallDate && type === 'SUBSCRIPTION_CHARGE_ACTIVATED') {
+          const eventDate = new Date(event.occurredAt);
+          const diffDays = (eventDate - earliestInstallDate) / (1000 * 60 * 60 * 24);
+          if (diffDays <= trialDays) {
+            currentPlan = `${planName} Trial`;
+          } else {
+            currentPlan = planName;
+          }
+        } else {
+          currentPlan = planName;
+        }
+      } else if (
         type === 'SUBSCRIPTION_CHARGE_ACTIVATED' ||
         type === 'ONE_TIME_CHARGE_ACTIVATED' ||
         type === 'SUBSCRIPTION_CHARGE_UNFROZEN' ||
         type === 'SUBSCRIPTION_CHARGE_ACCEPTED'
       ) {
-        if (event.charge) {
-          const rawName = event.charge.name || 'Plan';
-          const cleanName = rawName
-            .replace(/_/g, ' ')
-            .replace(/-/g, ' ')
-            .toLowerCase()
-            .replace(/\b\w/g, (l) => l.toUpperCase());
-          const amountVal = event.charge.amount?.amount ? parseFloat(event.charge.amount.amount) : 0;
-          const planName = `${cleanName} ($${amountVal})`;
-          if (trialDays > 0 && earliestInstallDate) {
-            const eventDate = new Date(event.occurredAt);
-            const diffDays = (eventDate - earliestInstallDate) / (1000 * 60 * 60 * 24);
-            if (diffDays <= trialDays) {
-              currentPlan = `${planName} Trial`;
-            } else {
-              currentPlan = planName;
-            }
-          } else {
-            currentPlan = planName;
-          }
-        } else {
+        if (currentPlan === 'No Plan') {
           if (trialDays > 0 && earliestInstallDate) {
             const eventDate = new Date(event.occurredAt);
             const diffDays = (eventDate - earliestInstallDate) / (1000 * 60 * 60 * 24);
             if (diffDays <= trialDays) {
               currentPlan = 'Trial';
             } else {
-              currentPlan = 'No Plan';
+              currentPlan = 'Basic';
             }
           } else {
-            currentPlan = 'No Plan';
+            currentPlan = 'Basic';
           }
         }
-      }
-
-      if (
-        type === 'SUBSCRIPTION_CHARGE_CANCELED' ||
-        type === 'SUBSCRIPTION_CHARGE_EXPIRED' ||
-        type === 'ONE_TIME_CHARGE_EXPIRED' ||
-        type === 'RELATIONSHIP_UNINSTALLED' ||
-        type === 'RELATIONSHIP_DEACTIVATED'
-      ) {
-        currentPlan = 'No Plan';
-      }
-
-      if (type === 'RELATIONSHIP_INSTALLED' || type === 'RELATIONSHIP_REACTIVATED') {
-        if (trialDays > 0 && earliestInstallDate) {
-          const eventDate = new Date(event.occurredAt);
-          const diffDays = (eventDate - earliestInstallDate) / (1000 * 60 * 60 * 24);
-          if (diffDays <= trialDays) {
-            currentPlan = 'Trial';
-          } else {
-            currentPlan = 'No Plan';
+      } else if (type === 'RELATIONSHIP_INSTALLED' || type === 'RELATIONSHIP_REACTIVATED') {
+        if (currentPlan === 'No Plan') {
+          if (trialDays > 0 && earliestInstallDate) {
+            const eventDate = new Date(event.occurredAt);
+            const diffDays = (eventDate - earliestInstallDate) / (1000 * 60 * 60 * 24);
+            if (diffDays <= trialDays) {
+              currentPlan = 'Trial';
+            }
           }
-        } else {
-          currentPlan = 'No Plan';
         }
       }
     }
 
-    if (earliestInstallDate) {
+    if (earliestInstallDate && currentPlan === 'Trial') {
       const diffDays = (new Date() - earliestInstallDate) / (1000 * 60 * 60 * 24);
       if (diffDays > trialDays) {
         if (currentPlan === 'Trial') {
           currentPlan = 'No Plan';
-        } else if (currentPlan && currentPlan.endsWith(' Trial')) {
-          currentPlan = currentPlan.replace(' Trial', '');
         }
       }
     }
@@ -616,8 +659,8 @@ function deriveStoreDetails(shop, domain, cleanName) {
       const shopId = store._id || 'unknown';
       const domain = store.storeDomain || '';
       const events = shopEventsMap[shopId] || [];
-
       const adminDetails = adminCache[domain] || adminCache[domain.replace('.myshopify.com', '')];
+      store.plan = getStorePlanFromEvents(events, appName || appApiKey);
       if (adminDetails) {
         if (adminDetails.storeName) {
           store.storeName = adminDetails.storeName;
@@ -630,7 +673,7 @@ function deriveStoreDetails(shop, domain, cleanName) {
         if (adminDetails.contactEmail) {
           store.contactEmail = adminDetails.contactEmail;
         }
-        if (adminDetails.plan) {
+        if (adminDetails.plan && adminDetails.plan !== 'No Plan') {
           store.plan = adminDetails.plan;
         }
         if (adminDetails.storeType) {
@@ -642,10 +685,8 @@ function deriveStoreDetails(shop, domain, cleanName) {
         if (adminDetails.phoneNumber) {
           store.phoneNumber = adminDetails.phoneNumber;
         }
-      } else {
-        store.plan = getStorePlanFromEvents(events, appName || appApiKey);
-        store.storeType = getStoreTypeFromEvents(events, store.plan, appName || appApiKey);
       }
+      store.storeType = getStoreTypeFromEvents(events, store.plan, appName || appApiKey);
 
       // Query activeSubscription API for accurate live app plan
       const rawShopNum = shopId.replace(/[^0-9]/g, '');
@@ -720,9 +761,7 @@ function deriveStoreDetails(shop, domain, cleanName) {
     planDeclined: (eventCounts.SUBSCRIPTION_CHARGE_DECLINED || 0).toLocaleString(),
   };
 
-  console.log(`\n[${appName}] Plan Expired Summary: ${metrics.planExpired} total (SUBSCRIPTION_CHARGE_EXPIRED: ${eventCounts.SUBSCRIPTION_CHARGE_EXPIRED || 0}, ONE_TIME_CHARGE_EXPIRED: ${eventCounts.ONE_TIME_CHARGE_EXPIRED || 0}, SUBSCRIPTION_CHARGE_CANCELED: ${eventCounts.SUBSCRIPTION_CHARGE_CANCELED || 0})\n`);
-
-  return {
+  const result = {
     appName,
     appId: appApiKey,
     totalEventsCount: totalCount,
@@ -751,6 +790,13 @@ function deriveStoreDetails(shop, domain, cleanName) {
     monthlyTrends,
     events: filteredEvents,
   };
+
+  appEventsCache.set(cacheKey, { timestamp: Date.now(), data: result });
+  return result;
+}
+
+export function clearEventsCache() {
+  appEventsCache.clear();
 }
 
 export {

@@ -12,17 +12,16 @@ import {
   Search,
   X,
   Eye,
-  ChevronLeft,
-  ChevronRight,
-  ArrowUpDown,
+  ChevronDown,
   ArrowUp,
   ArrowDown,
-  ListFilter,
   GripVertical,
   ExternalLink,
+  Check,
+  Download,
+  ListFilter,
+  SlidersHorizontal,
 } from "lucide-react";
-
-
 
 const getTotalDays = (row) => {
   const rawEvents = Array.isArray(row?.pastEvents) ? row.pastEvents : [];
@@ -39,6 +38,40 @@ const getTotalDays = (row) => {
   const d = earliestDate ? new Date(earliestDate) : new Date();
   const diffTime = Math.abs(new Date() - (isNaN(d.getTime()) ? new Date() : d));
   return Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+};
+
+const CustomCheckbox = ({
+  checked = false,
+  indeterminate = false,
+  onChange,
+  onClick,
+  className = "",
+  size = "md",
+}) => {
+  const sizeClasses = size === "sm" ? "w-3.5 h-3.5 rounded" : "w-4 h-4 rounded";
+
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      onClick={(e) => {
+        if (onClick) onClick(e);
+        if (onChange) onChange(e);
+      }}
+      className={`inline-flex items-center justify-center shrink-0 border transition-all cursor-pointer select-none ${sizeClasses} ${
+        checked || indeterminate
+          ? "bg-black border-black text-white shadow-2xs"
+          : "bg-white border-slate-300 hover:border-slate-400 text-transparent"
+      } ${className}`}
+    >
+      {checked ? (
+        <Check className="w-3 h-3 text-white stroke-[3]" />
+      ) : indeterminate ? (
+        <span className="w-2 h-0.5 bg-white rounded-full" />
+      ) : null}
+    </button>
+  );
 };
 
 const Main_Table = ({
@@ -67,15 +100,15 @@ const Main_Table = ({
   const navigate = useNavigate();
   const isServerSide = totalCount !== undefined;
 
-  // Popover state for Status Column
-  const [isStatusPopupOpen, setIsStatusPopupOpen] = useState(false);
-  const statusPopupRef = useRef(null);
+  // Active popover column ID
+  const [activeDropdown, setActiveDropdown] = useState(null);
+  const activeDropdownRef = useRef(null);
 
-  // Popover state for Plan Column
-  const [isPlanPopupOpen, setIsPlanPopupOpen] = useState(false);
-  const planPopupRef = useRef(null);
+  // Selected row keys
+  const [selectedRowIds, setSelectedRowIds] = useState(new Set());
 
   const [columnOrder, setColumnOrder] = useState([
+    "selection",
     "storeName",
     "storeDomain",
     "totalDays",
@@ -86,21 +119,33 @@ const Main_Table = ({
     "actions",
   ]);
   const [draggedColumnId, setDraggedColumnId] = useState(null);
+  const [columnVisibility, setColumnVisibility] = useState({});
+
+  const getColumnLabel = (column) => {
+    if (typeof column.columnDef.header === "string") {
+      return column.columnDef.header;
+    }
+    const labels = {
+      storeName: "Store Name",
+      storeDomain: "Shop Domain",
+      totalDays: "Total Days",
+      isActive: "Event",
+      plan: "Plan",
+      createdOn: "Created On",
+      updatedAt: "Updated On",
+      actions: "Action",
+    };
+    return labels[column.id] || column.id;
+  };
 
   // Close popup when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
-        statusPopupRef.current &&
-        !statusPopupRef.current.contains(event.target)
+        activeDropdownRef.current &&
+        !activeDropdownRef.current.contains(event.target)
       ) {
-        setIsStatusPopupOpen(false);
-      }
-      if (
-        planPopupRef.current &&
-        !planPopupRef.current.contains(event.target)
-      ) {
-        setIsPlanPopupOpen(false);
+        setActiveDropdown(null);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -245,6 +290,74 @@ const Main_Table = ({
   const columns = useMemo(
     () => [
       {
+        id: "selection",
+        header: ({ table }) => {
+          const rows = table.getRowModel().rows;
+          const isAllSelected =
+            rows.length > 0 &&
+            rows.every((r) =>
+              selectedRowIds.has(
+                r.original.storeDomain || r.original._id || r.id,
+              ),
+            );
+          const isSomeSelected =
+            rows.some((r) =>
+              selectedRowIds.has(
+                r.original.storeDomain || r.original._id || r.id,
+              ),
+            ) && !isAllSelected;
+
+          return (
+            <CustomCheckbox
+              checked={isAllSelected}
+              indeterminate={isSomeSelected}
+              onChange={() => {
+                setSelectedRowIds((prev) => {
+                  const next = new Set(prev);
+                  if (isAllSelected) {
+                    rows.forEach((r) =>
+                      next.delete(
+                        r.original.storeDomain || r.original._id || r.id,
+                      ),
+                    );
+                  } else {
+                    rows.forEach((r) =>
+                      next.add(
+                        r.original.storeDomain || r.original._id || r.id,
+                      ),
+                    );
+                  }
+                  return next;
+                });
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          );
+        },
+        enableSorting: false,
+        cell: ({ row }) => {
+          const rowKey = row.original.storeDomain || row.original._id || row.id;
+          const isChecked = selectedRowIds.has(rowKey);
+          return (
+            <CustomCheckbox
+              checked={isChecked}
+              onChange={() => {
+                setSelectedRowIds((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(rowKey)) {
+                    next.delete(rowKey);
+                  } else {
+                    next.add(rowKey);
+                  }
+                  return next;
+                });
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          );
+        },
+      },
+      {
         id: "storeName",
         accessorFn: (row) =>
           row?.storeName ||
@@ -260,7 +373,7 @@ const Main_Table = ({
         cell: ({ getValue }) => {
           const name = getValue() || "N/A";
           return (
-            <span className="font-normal text-slate-800 text-sm whitespace-nowrap">
+            <span className="font-semibold text-slate-900 text-sm whitespace-nowrap">
               {name}
             </span>
           );
@@ -268,7 +381,7 @@ const Main_Table = ({
       },
       {
         accessorKey: "storeDomain",
-        header: "Shop Domain",
+        header: "Domain",
         enableSorting: true,
         cell: ({ getValue }) => {
           const domain = getValue() || "N/A";
@@ -286,7 +399,6 @@ const Main_Table = ({
           );
         },
       },
-
       {
         id: "totalDays",
         accessorFn: (row) => getTotalDays(row),
@@ -304,7 +416,7 @@ const Main_Table = ({
       {
         accessorKey: "isActive",
         header: "Status",
-        enableSorting: false,
+        enableSorting: true,
         cell: ({ row }) => {
           const status = getStatusInfo(row.original);
           return (
@@ -319,7 +431,7 @@ const Main_Table = ({
       {
         accessorKey: "plan",
         header: "Plan",
-        enableSorting: false,
+        enableSorting: true,
         cell: ({ getValue }) => {
           const val = getValue() || "N/A";
           if (val === "Trial") {
@@ -443,7 +555,7 @@ const Main_Table = ({
         ),
       },
     ],
-    [navigate, onRowClick],
+    [navigate, onRowClick, selectedRowIds],
   );
 
   const sortingState = useMemo(
@@ -471,8 +583,10 @@ const Main_Table = ({
       sorting: sortingState,
       pagination: paginationState,
       columnOrder,
+      columnVisibility,
     },
     onColumnOrderChange: setColumnOrder,
+    onColumnVisibilityChange: setColumnVisibility,
     onSortingChange: (updater) => {
       if (!onSortChange) return;
       const nextSorting =
@@ -504,23 +618,6 @@ const Main_Table = ({
   const startRecord = totalRecords === 0 ? 0 : (page - 1) * limit + 1;
   const endRecord = Math.min(page * limit, totalRecords);
 
-  const getSortBadgeText = (columnId, isSorted) => {
-    if (!isSorted) return null;
-    if (
-      columnId === "storeName" ||
-      columnId === "storeDomain"
-    ) {
-      return isSorted === "asc" ? "A-Z" : "Z-A";
-    }
-    if (columnId === "totalDays") {
-      return isSorted === "asc" ? "Least" : "Most";
-    }
-    if (columnId === "createdOn" || columnId === "updatedAt") {
-      return isSorted === "asc" ? "Oldest" : "Newest";
-    }
-    return isSorted === "asc" ? "ASC" : "DESC";
-  };
-
   // Drag and Drop handlers
   const handleDragStart = (e, columnId) => {
     setDraggedColumnId(columnId);
@@ -550,6 +647,54 @@ const Main_Table = ({
     setDraggedColumnId(null);
   };
 
+  const handleExport = () => {
+    let listToExport = allDiscounts.length > 0 ? allDiscounts : discounts;
+    if (selectedRowIds.size > 0) {
+      listToExport = listToExport.filter((d) =>
+        selectedRowIds.has(d.storeDomain || d._id || d.id),
+      );
+    }
+    if (listToExport.length === 0) return;
+
+    const exportRows = listToExport.map((d) => {
+      const status = getStatusInfo(d);
+      return {
+        "Store Name": d.storeName || d.name || d.storeDomain || "",
+        Domain: d.storeDomain || "",
+        "Total Days": getTotalDays(d),
+        Status: status.label,
+        Plan: d.plan || "No Plan",
+        "Created On": d.createdAt || d.createdOn || "",
+        Updated: d.updatedAt || "",
+      };
+    });
+
+    const headers = Object.keys(exportRows[0]);
+    const csvContent = [
+      headers.join(","),
+      ...exportRows.map((row) =>
+        headers
+          .map((header) => {
+            const val = `${row[header] || ""}`.replace(/"/g, '""');
+            return `"${val}"`;
+          })
+          .join(","),
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute(
+      "download",
+      `merchants_export_${new Date().toISOString().slice(0, 10)}.csv`,
+    );
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="w-full bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
       {/* Toolbar: Dynamic left aligned title and right aligned static search */}
@@ -557,7 +702,7 @@ const Main_Table = ({
         <h2 className="text-base font-bold text-slate-800 tracking-tight">
           Installation Database
         </h2>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="relative flex items-center">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
               <Search className="w-4 h-4" />
@@ -567,7 +712,7 @@ const Main_Table = ({
               value={search}
               onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
               placeholder="Search domain, name or email..."
-              className="w-64 sm:w-80 pl-9 pr-8 py-2 text-xs bg-white border border-slate-200/90 rounded-2xl focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 transition-all placeholder:text-slate-400 text-slate-900 font-semibold"
+              className="w-60 sm:w-72 h-10 pl-9 pr-8 py-2.5 text-xs bg-white border border-slate-200/90 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 transition-all placeholder:text-slate-400 text-slate-900 font-semibold box-border"
             />
             {search && (
               <button
@@ -585,28 +730,133 @@ const Main_Table = ({
             onChange={(e) =>
               onLimitChange && onLimitChange(Number(e.target.value))
             }
-            className="px-3.5 py-2 bg-white border border-slate-200/90 rounded-2xl font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 cursor-pointer text-xs transition-all"
+            className="h-10 px-3.5 py-2.5 bg-white border border-slate-200/90 rounded-lg font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 cursor-pointer text-xs transition-all box-border"
           >
             <option value={10}>10 per page</option>
             <option value={25}>25 per page</option>
             <option value={50}>50 per page</option>
             <option value={100}>100 per page</option>
           </select>
+
+          <button
+            type="button"
+            onClick={handleExport}
+            className="h-10 inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-semibold text-xs transition-colors shadow-2xs cursor-pointer box-border"
+            title="Export merchant records"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>
+              Export (
+              {selectedRowIds.size > 0
+                ? selectedRowIds.size.toLocaleString()
+                : totalRecords.toLocaleString()}
+              )
+            </span>
+          </button>
+
+          {/* Column Visibility Toggle Button & Popover */}
+          <div
+            className="relative inline-block"
+            ref={
+              activeDropdown === "columnVisibility" ? activeDropdownRef : null
+            }
+          >
+            <button
+              type="button"
+              onClick={() =>
+                setActiveDropdown((prev) =>
+                  prev === "columnVisibility" ? null : "columnVisibility",
+                )
+              }
+              className={`h-10 inline-flex items-center gap-2 px-3.5 py-2.5 rounded-lg font-semibold text-xs transition-all shadow-2xs cursor-pointer border box-border ${
+                activeDropdown === "columnVisibility"
+                  ? "bg-slate-900 text-white border-slate-900 hover:bg-slate-800"
+                  : "bg-white text-slate-800 border-slate-200/90 hover:bg-slate-50 hover:border-slate-300"
+              }`}
+              title="Hide/Show Columns"
+            >
+              <SlidersHorizontal
+                className={`w-3.5 h-3.5 transition-colors ${
+                  activeDropdown === "columnVisibility"
+                    ? "text-white"
+                    : "text-slate-700"
+                }`}
+              />
+              <span
+                className={`rounded px-1.5 py-0.5 text-[10px] font-bold min-w-[18px] text-center leading-none transition-colors ${
+                  activeDropdown === "columnVisibility"
+                    ? "bg-slate-700 text-white"
+                    : "bg-slate-900 text-white"
+                }`}
+              >
+                {
+                  table
+                    .getAllLeafColumns()
+                    .filter(
+                      (col) => col.id !== "selection" && col.getIsVisible(),
+                    ).length
+                }
+              </span>
+            </button>
+
+            {activeDropdown === "columnVisibility" && (
+              <div
+                className="absolute right-0 top-full mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-4 text-xs animate-in fade-in slide-in-from-top-1 duration-150"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">
+                  VISIBLE COLUMNS
+                </div>
+                <div className="max-h-64 overflow-y-auto space-y-1 pr-0.5">
+                  {table
+                    .getAllLeafColumns()
+                    .filter((col) => col.id !== "selection")
+                    .map((col) => {
+                      const isVisible = col.getIsVisible();
+                      return (
+                        <label
+                          key={col.id}
+                          className="flex items-center justify-between px-2.5 py-1.5 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors select-none"
+                        >
+                          <span
+                            className={`text-xs transition-colors ${
+                              isVisible
+                                ? "font-semibold text-slate-800"
+                                : "font-normal text-slate-400"
+                            }`}
+                          >
+                            {getColumnLabel(col)}
+                          </span>
+                          <CustomCheckbox
+                            size="sm"
+                            checked={isVisible}
+                            onChange={col.getToggleVisibilityHandler()}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </label>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Filter banner placed inside card directly below toolbar */}
       {activeFiltersText && (
-        <div className="mx-5 mt-4 p-3 rounded-xl bg-slate-100/80 border border-slate-200 text-xs text-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-semibold animate-in fade-in duration-150">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span>Filtering merchants by clicked chart/metric criteria:</span>
-            <span className="font-mono bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-800 font-bold shadow-2xs">
+        <div className="mx-5 my-4 p-3.5 sm:px-4 rounded-xl bg-[#f3f4f6] border border-slate-300 text-xs text-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-normal animate-in fade-in duration-150">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-slate-600 font-normal">
+              Filtering merchants by clicked chart/metric criteria:
+            </span>
+            <span className="font-mono bg-[#e5e7eb] border border-slate-300 rounded px-2 py-0.5 text-slate-900 font-bold text-xs">
               {activeFiltersText}
             </span>
           </div>
           <button
             onClick={onResetFilters}
-            className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 px-3 py-1 rounded-lg shadow-2xs font-bold transition-all cursor-pointer whitespace-nowrap"
+            className="bg-white border border-slate-300 hover:bg-slate-100 text-slate-900 px-3.5 py-1 rounded text-xs font-bold transition-all cursor-pointer whitespace-nowrap shadow-2xs"
           >
             Reset Filters
           </button>
@@ -623,11 +873,28 @@ const Main_Table = ({
                 className="border-b border-slate-200 bg-slate-50/80"
               >
                 {headerGroup.headers.map((header, headerIndex) => {
+                  if (header.id === "selection") {
+                    return (
+                      <th
+                        key={header.id}
+                        className="w-10 px-4 py-3.5 text-center text-xs font-bold text-slate-600 sticky left-0 z-30 bg-slate-50 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]"
+                      >
+                        {flexRender(
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        )}
+                      </th>
+                    );
+                  }
+
                   const canSort = header.column.getCanSort();
-                  const isSorted = header.column.getIsSorted();
-                  const badgeText = getSortBadgeText(header.id, isSorted);
+                  const isSorted = sortField === header.id ? sortOrder : null;
                   const isStatusColumn = header.id === "isActive";
-                  const isFirstColumn = headerIndex === 0;
+                  const isPlanColumn = header.id === "plan";
+                  const hasFilterOrSort =
+                    canSort || isStatusColumn || isPlanColumn;
+                  const isDropdownOpen = activeDropdown === header.id;
+                  const isFirstDataColumn = headerIndex === 1;
 
                   return (
                     <th
@@ -636,20 +903,11 @@ const Main_Table = ({
                       onDragStart={(e) => handleDragStart(e, header.id)}
                       onDragOver={handleDragOver}
                       onDrop={(e) => handleDrop(e, header.id)}
-                      className={`whitespace-nowrap px-5 py-3.5 text-xs font-bold text-slate-600 uppercase tracking-wider relative transition-colors ${
-                        isFirstColumn
-                          ? "sticky left-0 z-30 bg-slate-50 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]"
+                      className={`whitespace-nowrap px-4 py-3.5 text-xs font-bold text-slate-600 uppercase tracking-wider relative transition-colors ${
+                        isFirstDataColumn
+                          ? "sticky left-10 z-20 bg-slate-50 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]"
                           : ""
-                      } ${draggedColumnId === header.id ? "opacity-40 bg-slate-200" : ""} ${
-                        canSort
-                          ? "cursor-pointer select-none hover:text-slate-900"
-                          : ""
-                      }`}
-                      onClick={
-                        canSort
-                          ? header.column.getToggleSortingHandler()
-                          : undefined
-                      }
+                      } ${draggedColumnId === header.id ? "opacity-40 bg-slate-200" : ""}`}
                     >
                       <div className="flex items-center gap-2">
                         {/* Drag Handle */}
@@ -657,6 +915,7 @@ const Main_Table = ({
                           <GripVertical className="w-3.5 h-3.5" />
                         </span>
 
+                        {/* Column Title */}
                         <span>
                           {flexRender(
                             header.column.columnDef.header,
@@ -664,230 +923,275 @@ const Main_Table = ({
                           )}
                         </span>
 
-                        {/* Status Column Filter Popup Trigger */}
-                        {isStatusColumn && (
-                          <div
-                            className="relative inline-block text-left"
-                            ref={statusPopupRef}
-                          >
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setIsStatusPopupOpen((prev) => !prev);
-                              }}
-                              className="p-1 rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-all flex items-center gap-1 cursor-pointer"
-                              title="Filter Status Popup"
-                            >
-                              <ListFilter className="w-3.5 h-3.5" />
-                            </button>
-
-                            {/* Status Filter Floating Popup Menu */}
-                            {isStatusPopupOpen && (
-                              <div
-                                className="absolute left-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 p-3 text-xs normal-case font-normal animate-in fade-in slide-in-from-top-2 duration-150"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <div className="px-1 py-1.5 font-bold text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-100 mb-2 flex items-center justify-between">
-                                  <span>FILTER</span>
-                                  {statusFilter.length > 0 && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (onStatusFilterChange)
-                                          onStatusFilterChange([]);
-                                        setIsStatusPopupOpen(false);
-                                      }}
-                                      className="text-rose-600 hover:underline text-[10px] normal-case font-bold cursor-pointer"
-                                    >
-                                      Clear
-                                    </button>
-                                  )}
-                                </div>
-
-                                <div className="space-y-2">
-                                  {statusOptions.map((option) => {
-                                    const isChecked = statusFilter.includes(
-                                      option.value,
-                                    );
-                                    return (
-                                      <label
-                                        key={option.value}
-                                        className="flex items-center justify-between px-2 py-1 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
-                                      >
-                                        <span className="flex items-center gap-2 text-slate-700 font-semibold">
-                                          <input
-                                            type="checkbox"
-                                            checked={isChecked}
-                                            onChange={() => {
-                                              if (!onStatusFilterChange) return;
-                                              const nextFilter = isChecked
-                                                ? statusFilter.filter(
-                                                    (v) => v !== option.value,
-                                                  )
-                                                : [
-                                                    ...statusFilter,
-                                                    option.value,
-                                                  ];
-                                              onStatusFilterChange(nextFilter);
-                                            }}
-                                            className="rounded border-slate-300 text-slate-900 focus:ring-slate-900/10 cursor-pointer w-3.5 h-3.5"
-                                          />
-                                          {option.label}
-                                        </span>
-                                        <span className="text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded-md">
-                                          {option.count}
-                                        </span>
-                                      </label>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Directional Sort Icon / Badge */}
-                        {canSort && (
-                          <div className="flex items-center gap-1">
+                        {/* Active Directional Sort Icon (if sorted) */}
+                        {isSorted && (
+                          <span className="inline-flex items-center text-slate-900">
                             {isSorted === "asc" ? (
-                              <ArrowUp className="w-3.5 h-3.5 text-slate-900" />
-                            ) : isSorted === "desc" ? (
-                              <ArrowDown className="w-3.5 h-3.5 text-slate-900" />
+                              <ArrowUp className="w-3 h-3 text-slate-900" />
                             ) : (
-                              <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 opacity-50 hover:opacity-100" />
+                              <ArrowDown className="w-3 h-3 text-slate-900" />
                             )}
-
-                            {badgeText && (
-                              <span className="px-1.5 py-0.5 text-[10px] font-bold tracking-tight rounded bg-slate-900 text-white capitalize shadow-2xs">
-                                {badgeText}
-                              </span>
-                            )}
-                          </div>
+                          </span>
                         )}
 
-                        {/* Plan Column Filter Popup Trigger */}
-                        {header.id === "plan" && (
+                        {/* Dropdown Sort & Filter Trigger & Popover */}
+                        {hasFilterOrSort && (
                           <div
-                            className="relative inline-block text-left font-normal normal-case"
-                            ref={planPopupRef}
+                            className="relative inline-flex items-center"
+                            ref={isDropdownOpen ? activeDropdownRef : null}
                           >
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setIsPlanPopupOpen((prev) => !prev);
+                                setActiveDropdown((prev) =>
+                                  prev === header.id ? null : header.id,
+                                );
                               }}
-                              className="p-1 rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-all flex items-center gap-1 cursor-pointer"
-                              title="Filter Plan Popup"
+                              className={`p-1 rounded-md transition-all flex items-center justify-center cursor-pointer ${
+                                isDropdownOpen ||
+                                isSorted ||
+                                (isStatusColumn && statusFilter.length > 0) ||
+                                (isPlanColumn && planFilter.length > 0)
+                                  ? "border border-slate-300 bg-white shadow-2xs text-slate-800"
+                                  : "text-slate-400 hover:text-slate-700 hover:bg-slate-200/60"
+                              }`}
+                              title={`Sort & Filter ${typeof header.column.columnDef.header === "string" ? header.column.columnDef.header : header.id}`}
                             >
-                              <ListFilter className="w-3.5 h-3.5" />
+                              {isStatusColumn || isPlanColumn ? (
+                                <ListFilter
+                                  className={`w-3.5 h-3.5 ${
+                                    (isStatusColumn &&
+                                      statusFilter.length > 0) ||
+                                    (isPlanColumn && planFilter.length > 0)
+                                      ? "text-indigo-600"
+                                      : isDropdownOpen
+                                        ? "text-slate-900"
+                                        : "text-slate-500"
+                                  }`}
+                                />
+                              ) : (
+                                <ChevronDown
+                                  className={`w-3 h-3 transition-transform ${
+                                    isDropdownOpen
+                                      ? "rotate-180 text-slate-900"
+                                      : ""
+                                  }`}
+                                />
+                              )}
                             </button>
 
-                            {isPlanPopupOpen && (
+                            {/* Popover Dropdown Menu */}
+                            {isDropdownOpen && (
                               <div
-                                className="absolute left-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 p-3 text-xs normal-case font-normal animate-in fade-in slide-in-from-top-2 duration-150"
+                                className="absolute left-0 top-full mt-1.5 min-w-[170px] bg-white rounded-xl shadow-xl border border-slate-200 z-50 p-2 text-xs normal-case font-normal animate-in fade-in slide-in-from-top-1 duration-150"
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 {/* SORT SECTION */}
-                                <div className="px-1 py-1 font-bold text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-100 mb-2">
-                                  SORT
-                                </div>
-                                <div className="space-y-1 mb-3">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (onSortChange)
-                                        onSortChange("plan", "asc");
-                                      setIsPlanPopupOpen(false);
-                                    }}
-                                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors text-left cursor-pointer"
-                                  >
-                                    ↑ Sort Ascending
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (onSortChange)
-                                        onSortChange("plan", "desc");
-                                      setIsPlanPopupOpen(false);
-                                    }}
-                                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors text-left cursor-pointer"
-                                  >
-                                    ↓ Sort Descending
-                                  </button>
-                                </div>
-
-                                {/* FILTER SECTION */}
-                                <div className="px-1 py-1.5 font-bold text-slate-400 uppercase tracking-wider text-[10px] border-b border-slate-100 mb-2 flex items-center justify-between">
-                                  <span>FILTER</span>
-                                  {planFilter.length > 0 && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (onPlanFilterChange)
-                                          onPlanFilterChange([]);
-                                        setIsPlanPopupOpen(false);
-                                      }}
-                                      className="text-rose-600 hover:underline text-[10px] normal-case font-bold cursor-pointer"
-                                    >
-                                      Clear
-                                    </button>
-                                  )}
-                                </div>
-
-                                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                                  {planOptions.map((option) => {
-                                    const isChecked = planFilter.includes(
-                                      option.value,
-                                    );
-                                    return (
-                                      <label
-                                        key={option.value}
-                                        className="flex items-center justify-between px-2 py-1 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
+                                {canSort && (
+                                  <>
+                                    <div className="px-2 py-1 font-bold text-slate-400 uppercase tracking-wider text-[10px]">
+                                      SORT
+                                    </div>
+                                    <div className="space-y-0.5 mb-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (onSortChange)
+                                            onSortChange(header.id, "asc");
+                                          setActiveDropdown(null);
+                                        }}
+                                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
+                                          isSorted === "asc"
+                                            ? "bg-slate-100 text-slate-900 font-semibold"
+                                            : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                                        }`}
                                       >
-                                        <span className="flex items-center gap-2 text-slate-700 font-semibold">
-                                          <input
-                                            type="checkbox"
-                                            checked={isChecked}
-                                            onChange={() => {
-                                              if (!onPlanFilterChange) return;
-                                              const nextFilter = isChecked
-                                                ? planFilter.filter(
-                                                    (v) => v !== option.value,
-                                                  )
-                                                : [...planFilter, option.value];
-                                              onPlanFilterChange(nextFilter);
-                                            }}
-                                            className="rounded border-slate-300 text-slate-900 focus:ring-slate-900/10 cursor-pointer w-3.5 h-3.5"
-                                          />
-                                          {option.label.endsWith(" Trial") ? (
-                                            <span className="inline-flex items-center gap-1">
-                                              <span>
-                                                {option.label.replace(
-                                                  " Trial",
-                                                  "",
-                                                )}
-                                              </span>
-                                              <span className="inline-flex items-center px-1 py-0.2 rounded-[3px] text-[8px] font-bold border bg-orange-100/70 text-orange-700 border-orange-200 uppercase tracking-wider scale-90">
-                                                TRIAL
-                                              </span>
-                                            </span>
-                                          ) : option.label === "Trial" ? (
-                                            <span className="inline-flex items-center px-1 py-0.2 rounded-[3px] text-[8px] font-bold border bg-orange-100/70 text-orange-700 border-orange-200 uppercase tracking-wider scale-90">
-                                              TRIAL
-                                            </span>
-                                          ) : (
-                                            option.label
-                                          )}
+                                        <span className="flex items-center gap-2">
+                                          <ArrowUp className="w-3.5 h-3.5 text-slate-500" />
+                                          <span>Sort Ascending</span>
                                         </span>
-                                        <span className="text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded-md">
-                                          {option.count}
+                                        {isSorted === "asc" && (
+                                          <Check className="w-3.5 h-3.5 text-indigo-600" />
+                                        )}
+                                      </button>
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (onSortChange)
+                                            onSortChange(header.id, "desc");
+                                          setActiveDropdown(null);
+                                        }}
+                                        className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
+                                          isSorted === "desc"
+                                            ? "bg-slate-100 text-slate-900 font-semibold"
+                                            : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                                        }`}
+                                      >
+                                        <span className="flex items-center gap-2">
+                                          <ArrowDown className="w-3.5 h-3.5 text-slate-500" />
+                                          <span>Sort Descending</span>
                                         </span>
-                                      </label>
-                                    );
-                                  })}
-                                </div>
+                                        {isSorted === "desc" && (
+                                          <Check className="w-3.5 h-3.5 text-indigo-600" />
+                                        )}
+                                      </button>
+                                    </div>
+                                  </>
+                                )}
+
+                                {/* STATUS FILTER SECTION */}
+                                {isStatusColumn && (
+                                  <>
+                                    {canSort && (
+                                      <div className="my-1.5 border-t border-slate-100" />
+                                    )}
+                                    <div className="px-2 py-1 font-bold text-slate-400 uppercase tracking-wider text-[10px] flex items-center justify-between">
+                                      <span>FILTER</span>
+                                      {statusFilter.length > 0 && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (onStatusFilterChange)
+                                              onStatusFilterChange([]);
+                                            setActiveDropdown(null);
+                                          }}
+                                          className="text-rose-600 hover:underline text-[10px] normal-case font-bold cursor-pointer"
+                                        >
+                                          Clear
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    <div className="space-y-1 mt-1 max-h-48 overflow-y-auto">
+                                      {statusOptions.map((option) => {
+                                        const isChecked = statusFilter.includes(
+                                          option.value,
+                                        );
+                                        return (
+                                          <label
+                                            key={option.value}
+                                            className="flex items-center justify-between px-2 py-1 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
+                                          >
+                                            <span className="flex items-center gap-2 text-slate-700 font-medium">
+                                              <CustomCheckbox
+                                                size="sm"
+                                                checked={isChecked}
+                                                onChange={() => {
+                                                  if (!onStatusFilterChange)
+                                                    return;
+                                                  const nextFilter = isChecked
+                                                    ? statusFilter.filter(
+                                                        (v) =>
+                                                          v !== option.value,
+                                                      )
+                                                    : [
+                                                        ...statusFilter,
+                                                        option.value,
+                                                      ];
+                                                  onStatusFilterChange(
+                                                    nextFilter,
+                                                  );
+                                                }}
+                                              />
+                                              {option.label}
+                                            </span>
+                                            <span className="text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded-md">
+                                              {option.count}
+                                            </span>
+                                          </label>
+                                        );
+                                      })}
+                                    </div>
+                                  </>
+                                )}
+
+                                {/* PLAN FILTER SECTION */}
+                                {isPlanColumn && (
+                                  <>
+                                    {canSort && (
+                                      <div className="my-1.5 border-t border-slate-100" />
+                                    )}
+                                    <div className="px-2 py-1 font-bold text-slate-400 uppercase tracking-wider text-[10px] flex items-center justify-between">
+                                      <span>FILTER</span>
+                                      {planFilter.length > 0 && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (onPlanFilterChange)
+                                              onPlanFilterChange([]);
+                                            setActiveDropdown(null);
+                                          }}
+                                          className="text-rose-600 hover:underline text-[10px] normal-case font-bold cursor-pointer"
+                                        >
+                                          Clear
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    <div className="space-y-1 mt-1 max-h-48 overflow-y-auto pr-1">
+                                      {planOptions.map((option) => {
+                                        const isChecked = planFilter.includes(
+                                          option.value,
+                                        );
+                                        return (
+                                          <label
+                                            key={option.value}
+                                            className="flex items-center justify-between px-2 py-1 hover:bg-slate-50 rounded-lg cursor-pointer transition-colors"
+                                          >
+                                            <span className="flex items-center gap-2 text-slate-700 font-medium">
+                                              <CustomCheckbox
+                                                size="sm"
+                                                checked={isChecked}
+                                                onChange={() => {
+                                                  if (!onPlanFilterChange)
+                                                    return;
+                                                  const nextFilter = isChecked
+                                                    ? planFilter.filter(
+                                                        (v) =>
+                                                          v !== option.value,
+                                                      )
+                                                    : [
+                                                        ...planFilter,
+                                                        option.value,
+                                                      ];
+                                                  onPlanFilterChange(
+                                                    nextFilter,
+                                                  );
+                                                }}
+                                              />
+                                              {option.label.endsWith(
+                                                " Trial",
+                                              ) ? (
+                                                <span className="inline-flex items-center gap-1">
+                                                  <span>
+                                                    {option.label.replace(
+                                                      " Trial",
+                                                      "",
+                                                    )}
+                                                  </span>
+                                                  <span className="inline-flex items-center px-1 py-0.2 rounded-[3px] text-[8px] font-bold border bg-orange-100/70 text-orange-700 border-orange-200 uppercase tracking-wider scale-90">
+                                                    TRIAL
+                                                  </span>
+                                                </span>
+                                              ) : option.label === "Trial" ? (
+                                                <span className="inline-flex items-center px-1 py-0.2 rounded-[3px] text-[8px] font-bold border bg-orange-100/70 text-orange-700 border-orange-200 uppercase tracking-wider scale-90">
+                                                  TRIAL
+                                                </span>
+                                              ) : (
+                                                option.label
+                                              )}
+                                            </span>
+                                            <span className="text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded-md">
+                                              {option.count}
+                                            </span>
+                                          </label>
+                                        );
+                                      })}
+                                    </div>
+                                  </>
+                                )}
                               </div>
                             )}
                           </div>
@@ -903,7 +1207,7 @@ const Main_Table = ({
             {loading && discounts.length === 0 ? (
               <tr>
                 <td
-                  colSpan={columns.length}
+                  colSpan={table.getVisibleFlatColumns().length}
                   className="px-5 py-12 text-center text-slate-500 text-sm"
                 >
                   Loading stores...
@@ -912,7 +1216,7 @@ const Main_Table = ({
             ) : table.getRowModel().rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={columns.length}
+                  colSpan={table.getVisibleFlatColumns().length}
                   className="px-5 py-12 text-center text-slate-500 text-sm"
                 >
                   No stores found matching your criteria.
@@ -934,15 +1238,18 @@ const Main_Table = ({
                   className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
                 >
                   {row.getVisibleCells().map((cell, cellIndex) => {
-                    const isFirstColumn = cellIndex === 0;
+                    const isSelectionColumn = cell.column.id === "selection";
+                    const isFirstDataColumn = cellIndex === 1;
 
                     return (
                       <td
                         key={cell.id}
-                        className={`whitespace-nowrap px-5 py-3.5 align-middle ${
-                          isFirstColumn
-                            ? "sticky left-0 z-10 bg-white group-hover:bg-slate-50 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]"
-                            : ""
+                        className={`whitespace-nowrap px-4 py-3.5 align-middle ${
+                          isSelectionColumn
+                            ? "w-10 text-center sticky left-0 z-10 bg-white group-hover:bg-slate-50 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]"
+                            : isFirstDataColumn
+                              ? "sticky left-10 z-10 bg-white group-hover:bg-slate-50 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]"
+                              : ""
                         }`}
                       >
                         {flexRender(
@@ -960,42 +1267,38 @@ const Main_Table = ({
       </div>
 
       {/* Pagination Controls */}
-      <div className="px-5 py-3.5 border-t border-slate-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
-        <div className="flex items-center gap-2">
-          <span>
-            Showing{" "}
-            <span className="font-semibold text-slate-900">{startRecord}</span>{" "}
-            to <span className="font-semibold text-slate-900">{endRecord}</span>{" "}
-            of{" "}
-            <span className="font-semibold text-slate-900">{totalRecords}</span>{" "}
-            stores
-          </span>
-        </div>
+      {totalPages > 1 && (
+        <div className="px-5 py-3.5 border-t border-slate-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
+          <div>
+            Showing Page{" "}
+            <span className="font-bold text-slate-900">{page}</span> of{" "}
+            <span className="font-bold text-slate-900">{totalPages}</span>{" "}
+            <span className="text-slate-400 font-normal">
+              ({startRecord.toLocaleString()}-{endRecord.toLocaleString()} of{" "}
+              {totalRecords.toLocaleString()} total entries)
+            </span>
+          </div>
 
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-slate-600 mr-2">
-            Page {page} of {totalPages}
-          </span>
-          <button
-            type="button"
-            disabled={page <= 1}
-            onClick={() => onPageChange && onPageChange(page - 1)}
-            className="inline-flex items-center justify-center p-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-            title="Previous Page"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            disabled={page >= totalPages}
-            onClick={() => onPageChange && onPageChange(page + 1)}
-            className="inline-flex items-center justify-center p-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-            title="Next Page"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => onPageChange && onPageChange(page - 1)}
+              className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:bg-slate-50/80 disabled:text-slate-300 disabled:border-slate-100 disabled:cursor-not-allowed font-semibold transition-colors cursor-pointer text-xs shadow-2xs"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              disabled={page >= totalPages}
+              onClick={() => onPageChange && onPageChange(page + 1)}
+              className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:bg-slate-50/80 disabled:text-slate-300 disabled:border-slate-100 disabled:cursor-not-allowed font-semibold transition-colors cursor-pointer text-xs shadow-2xs"
+            >
+              Next
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

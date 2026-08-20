@@ -7,6 +7,50 @@ import { mockDiscounts } from "../data/mockData";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
+const getTotalDays = (row) => {
+  const rawEvents = Array.isArray(row?.pastEvents) ? row.pastEvents : [];
+  let earliestDate = row?.createdAt || row?.createdOn || row?.installedAt;
+  if (rawEvents.length > 0) {
+    const dates = rawEvents
+      .map((e) => new Date(e.timestamp || e.createdAt || e.date || 0))
+      .filter((d) => !isNaN(d.getTime()));
+    if (dates.length > 0) {
+      dates.sort((a, b) => a - b);
+      earliestDate = dates[0];
+    }
+  }
+  const d = earliestDate ? new Date(earliestDate) : new Date();
+  const diffTime = Math.abs(new Date() - (isNaN(d.getTime()) ? new Date() : d));
+  return Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+};
+
+const getStatusLabel = (row) => {
+  const rawEvents = Array.isArray(row?.pastEvents) ? row.pastEvents : [];
+  let latestEventName = "";
+  if (rawEvents.length > 0) {
+    const sorted = [...rawEvents].sort(
+      (a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0),
+    );
+    latestEventName = sorted[0]?.eventName || sorted[0]?.type || "";
+  }
+  const lowerEvent = latestEventName.toLowerCase();
+  if (lowerEvent.includes("reopen") || lowerEvent.includes("reopened"))
+    return "Store Reopened";
+  if (
+    lowerEvent.includes("close") ||
+    lowerEvent.includes("closed") ||
+    row?.isStoreClosed
+  )
+    return "Store Closed";
+  if (
+    lowerEvent.includes("uninstall") ||
+    lowerEvent.includes("uninstalled") ||
+    row?.isActive === false
+  )
+    return "Uninstalled";
+  return "Installed";
+};
+
 const All_Stores = ({
   selectedApp = "Passonext",
   onTotalCountChange,
@@ -64,6 +108,14 @@ const All_Stores = ({
     return [];
   });
 
+  const [activeSubscribers, setActiveSubscribers] = useState(() => {
+    return location.state?.activeSubscribers === true;
+  });
+
+  const [eventFilter, setEventFilter] = useState(() => {
+    return location.state?.eventFilter || "";
+  });
+
   // Clear state in history after reading
   useEffect(() => {
     if (location.state) {
@@ -73,28 +125,50 @@ const All_Stores = ({
 
   const activeFiltersText = useMemo(() => {
     const parts = [];
+    if (startDate) parts.push(`startDate: ${startDate}`);
+    if (endDate) parts.push(`endDate: ${endDate}`);
     if (search) {
       parts.push(`search: ${search}`);
     }
     if (statusFilter && statusFilter.length > 0) {
-      const mapped = statusFilter.map((s) => {
-        if (s === "closed") return "storeclosed";
-        if (s === "reopened") return "storereopened";
-        return s;
-      });
-      parts.push(`event: ${mapped.join(", ")}`);
+      parts.push(`event: ${statusFilter.join(", ")}`);
     }
     if (planFilter && planFilter.length > 0) {
       parts.push(`plan: ${planFilter.join(", ")}`);
     }
+    if (activeSubscribers) {
+      parts.push(`activeSubscribers: true`);
+    }
+    if (eventFilter) {
+      const displayFilter = eventFilter
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (l) => l.toUpperCase());
+      parts.push(`event: ${displayFilter}`);
+    }
     return parts.join(", ");
-  }, [search, statusFilter, planFilter]);
+  }, [
+    startDate,
+    endDate,
+    search,
+    statusFilter,
+    planFilter,
+    activeSubscribers,
+    eventFilter,
+  ]);
 
   const handleResetFilters = () => {
     setStatusFilter([]);
     setPlanFilter([]);
+    setActiveSubscribers(false);
+    setEventFilter("");
     setSearch("");
     setPage(1);
+    setLocalDatePreset("all");
+    setLocalStartDate("");
+    setLocalEndDate("");
+    if (propOnDateFilterChange) {
+      propOnDateFilterChange({ preset: "all", startDate: "", endDate: "" });
+    }
   };
 
   const filteredAndSortedDiscounts = useMemo(() => {
@@ -114,10 +188,40 @@ const All_Stores = ({
 
     // 2. Status filter
     if (statusFilter && statusFilter.length > 0) {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
       result = result.filter((item) => {
         const rawEvents = Array.isArray(item?.pastEvents)
           ? item.pastEvents
           : [];
+
+        // Support weekly installs filter (stores installed in the past 7 days)
+        if (statusFilter.includes("weekly")) {
+          const hasRecentInstallEvent = rawEvents.some((ev) => {
+            const evType = ev.type || ev.eventName || "";
+            const isInstall =
+              evType === "RELATIONSHIP_INSTALLED" ||
+              evType.toLowerCase().includes("installed");
+            const evDate = new Date(
+              ev.timestamp || ev.occurredAt || ev.createdAt || 0,
+            );
+            return (
+              isInstall && !isNaN(evDate.getTime()) && evDate >= sevenDaysAgo
+            );
+          });
+
+          const createdDate =
+            item.createdAt || item.createdOn || item.installedAt;
+          const isCreatedRecent =
+            createdDate &&
+            !isNaN(new Date(createdDate).getTime()) &&
+            new Date(createdDate) >= sevenDaysAgo;
+
+          if (hasRecentInstallEvent || isCreatedRecent) return true;
+          if (statusFilter.length === 1) return false;
+        }
+
         let latestEventName = "";
         if (rawEvents.length > 0) {
           const sorted = [...rawEvents].sort(
@@ -153,21 +257,71 @@ const All_Stores = ({
       );
     }
 
+    // 3b. Active subscribers filter — keep only stores with an active paid plan
+    if (activeSubscribers) {
+      result = result.filter((item) => {
+        const plan = (item.plan || "").trim();
+        return plan && plan !== "No Plan";
+      });
+    }
+
+    // 3c. Event-based filter — keep only stores that have a matching event in pastEvents
+    if (eventFilter) {
+      const normalizedFilter = eventFilter
+        .toUpperCase()
+        .replace(/_/g, " ")
+        .replace(/LL/g, "L");
+      result = result.filter((item) => {
+        const rawEvents = Array.isArray(item?.pastEvents)
+          ? item.pastEvents
+          : [];
+        return rawEvents.some((ev) => {
+          const evType = (ev.type || ev.eventName || "")
+            .toUpperCase()
+            .replace(/_/g, " ")
+            .replace(/LL/g, "L");
+          return evType.includes(normalizedFilter);
+        });
+      });
+    }
+
     // 4. Sort
     if (sortField) {
       result.sort((a, b) => {
-        let valA = a[sortField];
-        let valB = b[sortField];
+        let valA, valB;
 
-        if (sortField === "createdOn") {
-          valA = a.createdAt;
-          valB = b.createdAt;
+        if (sortField === "totalDays") {
+          valA = getTotalDays(a);
+          valB = getTotalDays(b);
+        } else if (sortField === "isActive" || sortField === "status") {
+          valA = getStatusLabel(a);
+          valB = getStatusLabel(b);
+        } else if (sortField === "createdOn") {
+          const rawA = a.createdAt || a.createdOn || a.installedAt;
+          const rawB = b.createdAt || b.createdOn || b.installedAt;
+          valA = rawA ? new Date(rawA).getTime() : 0;
+          valB = rawB ? new Date(rawB).getTime() : 0;
+        } else if (sortField === "updatedAt") {
+          valA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+          valB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+        } else if (sortField === "storeName") {
+          valA = (a.storeName || a.name || a.storeDomain || "").toLowerCase();
+          valB = (b.storeName || b.name || b.storeDomain || "").toLowerCase();
+        } else if (sortField === "storeDomain") {
+          valA = (a.storeDomain || "").toLowerCase();
+          valB = (b.storeDomain || "").toLowerCase();
+        } else if (sortField === "plan") {
+          valA = (a.plan || "No Plan").toLowerCase();
+          valB = (b.plan || "No Plan").toLowerCase();
+        } else {
+          valA = a[sortField];
+          valB = b[sortField];
         }
 
         if (valA === undefined || valA === null) return 1;
         if (valB === undefined || valB === null) return -1;
 
-        if (typeof valA === "string") {
+        if (typeof valA === "string" && typeof valB === "string") {
           return sortOrder === "desc"
             ? valB.localeCompare(valA)
             : valA.localeCompare(valB);
@@ -178,7 +332,16 @@ const All_Stores = ({
     }
 
     return result;
-  }, [discounts, search, statusFilter, planFilter, sortField, sortOrder]);
+  }, [
+    discounts,
+    search,
+    statusFilter,
+    planFilter,
+    activeSubscribers,
+    eventFilter,
+    sortField,
+    sortOrder,
+  ]);
 
   const paginatedDiscounts = useMemo(() => {
     const startIndex = (page - 1) * limit;
@@ -226,7 +389,11 @@ const All_Stores = ({
                   : "unknown.myshopify.com");
               if (!storeMap[domain]) {
                 const cleanName = domain.replace(".myshopify.com", "");
-                const storeName = ev.shop?.name || cleanName.replace(/[-_]/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+                const storeName =
+                  ev.shop?.name ||
+                  cleanName
+                    .replace(/[-_]/g, " ")
+                    .replace(/\b\w/g, (l) => l.toUpperCase());
                 storeMap[domain] = {
                   _id: shopId,
                   storeName: storeName,

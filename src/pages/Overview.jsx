@@ -211,6 +211,10 @@ export function Overview({
   };
 
   const handleCardClick = (cardId) => {
+    if (cardId === "weeklyInstalls") {
+      handleNavigateToMerchants("weeklyInstalls");
+      return;
+    }
     if (selectedMetric === cardId) {
       setSelectedMetric(null); // Toggle back to dual installs/uninstalls view
     } else {
@@ -220,29 +224,24 @@ export function Overview({
 
   const handleNavigateToMerchants = (cardId) => {
     let state;
-    if (cardId === "installs") {
-      state = { initialStatusFilter: ["installed"] };
-    } else if (cardId === "uninstalls") {
-      state = { initialStatusFilter: ["uninstalled"] };
-    } else if (cardId === "planExpired") {
-      state = { initialStatusFilter: ["closed"] };
-    } else if (cardId === "totalStores") {
+    if (cardId === "weeklyInstalls") {
+      state = { initialStatusFilter: ["weekly"] };
+    } else if (cardId === "installs") {
       state = { initialStatusFilter: ["installed", "reopened"] };
+    } else if (cardId === "uninstalls") {
+      state = { eventFilter: "uninstalled" };
+    } else if (cardId === "planExpired") {
+      state = { eventFilter: "charge_expired" };
+    } else if (cardId === "totalStores") {
+      state = {};
     } else if (cardId === "planCanceled") {
-      state = { initialPlanFilter: ["No Plan"] };
+      state = { eventFilter: "charge_canceled" };
     } else if (cardId === "planActivated") {
-      state = {
-        initialPlanFilter: [
-          "Starter Monthly ($9)",
-          "Pro Monthly ($19)",
-          "Enterprise Yearly ($768)",
-          "Basic - $8.00 Usd",
-          "1500+ Customers - $9.99",
-          "5001-25000 Customers - $19.99",
-          "More Than 25000 Customers - $29.99",
-          "Trial",
-        ],
-      };
+      state = { activeSubscribers: true };
+    } else if (cardId === "planUnfrozen") {
+      state = { eventFilter: "charge_unfrozen" };
+    } else if (cardId === "planDeclined") {
+      state = { eventFilter: "charge_declined" };
     } else {
       state = { initialStatusFilter: ["installed", "reopened"] };
     }
@@ -255,7 +254,7 @@ export function Overview({
       title: "Total Revenue",
       value: metrics.totalRevenue,
       icon: DollarSign,
-      clickable: true,
+      clickable: false,
     },
     {
       id: "weeklyInstalls",
@@ -332,12 +331,18 @@ export function Overview({
             value={card.value}
             icon={card.icon}
             isLoading={loading}
-            isActive={card.clickable ? selectedMetric === card.id : false}
+            isActive={
+              card.clickable && card.id !== "weeklyInstalls"
+                ? selectedMetric === card.id
+                : false
+            }
             onClick={
               card.clickable ? () => handleCardClick(card.id) : undefined
             }
             onValueClick={
-              card.clickable ? () => handleNavigateToMerchants(card.id) : undefined
+              card.clickable
+                ? () => handleNavigateToMerchants(card.id)
+                : undefined
             }
           />
         ))}

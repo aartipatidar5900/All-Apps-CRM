@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as echarts from "echarts";
 import { RefreshCw } from "lucide-react";
 import { ChartSkeleton } from "../SkeletonLoader";
+import ChartScrollBar from "./ChartScrollBar";
 
 // Configuration for each metric card when clicked
 const METRIC_CONFIGS = {
@@ -93,6 +94,8 @@ export default function OverviewTrendChart({
 }) {
   const chartRef = useRef(null);
   const chartInstance = useRef(null);
+  const zoomRef = useRef({ start: 0, end: 100 });
+  const [zoomState, setZoomState] = useState({ start: 0, end: 100 });
 
   // Active configuration: either a single metric config or the default dual Installs V/S Uninstalls
   const isSingleMetric = Boolean(
@@ -106,6 +109,20 @@ export default function OverviewTrendChart({
   const chartSubtitle = activeConfig
     ? activeConfig.subtitle
     : "Time series trend of installations and uninstallations across all historical periods";
+
+  // Handle external scrollbar change
+  const handleScrollBarChange = ({ start, end }) => {
+    zoomRef.current = { start, end };
+    setZoomState({ start, end });
+    if (chartInstance.current) {
+      chartInstance.current.dispatchAction({
+        type: "dataZoom",
+        dataZoomIndex: 0,
+        start,
+        end,
+      });
+    }
+  };
 
   useEffect(() => {
     if (loading) {
@@ -123,6 +140,11 @@ export default function OverviewTrendChart({
     }
 
     const months = data.map((d) => d.label || d.key || d.month);
+    const initialEnd =
+      data.length > 8 ? Math.round((8 / data.length) * 100) : 100;
+
+    zoomRef.current = { start: 0, end: initialEnd };
+    setZoomState({ start: 0, end: initialEnd });
 
     let series;
     if (isSingleMetric && activeConfig) {
@@ -244,7 +266,7 @@ export default function OverviewTrendChart({
       grid: {
         left: "2%",
         right: "2%",
-        bottom: data.length > 8 ? "12%" : "3%",
+        bottom: "6%",
         top: "14%",
         containLabel: true,
       },
@@ -281,42 +303,15 @@ export default function OverviewTrendChart({
       },
       dataZoom: [
         {
-          type: "slider",
-          show: data.length > 8,
-          xAxisIndex: [0],
-          left: "2%",
-          right: "2%",
-          bottom: 4,
-          height: 14,
-          start: 0,
-          end: data.length > 8 ? Math.round((8 / data.length) * 100) : 100,
-          zoomLock: true,
-          borderColor: "transparent",
-          backgroundColor: "#f1f5f9",
-          fillerColor: "#cbd5e1",
-          showDetail: false,
-          showDataShadow: false,
-          brushSelect: false,
-          handleIcon: "roundRect",
-          handleSize: "100%",
-          handleStyle: {
-            color: "#94a3b8",
-            borderColor: "transparent",
-            borderRadius: 3,
-          },
-          moveHandleSize: 6,
-          moveHandleStyle: {
-            color: "#64748b",
-          },
-          borderRadius: 6,
-        },
-        {
           type: "inside",
           xAxisIndex: [0],
+          start: 0,
+          end: initialEnd,
           zoomLock: true,
           zoomOnMouseWheel: false,
+          moveOnMouseWheel: false,
           moveOnMouseMove: true,
-          moveOnMouseWheel: true,
+          preventDefaultMouseMove: false,
         },
       ],
       series,
@@ -324,12 +319,98 @@ export default function OverviewTrendChart({
 
     chartInstance.current.setOption(option, true);
 
+    // Sync state when chart is dragged directly
+    const handleChartDataZoom = (params) => {
+      let s, e;
+      if (params.batch && params.batch.length > 0) {
+        s = params.batch[0].start;
+        e = params.batch[0].end;
+      } else if (
+        typeof params.start === "number" &&
+        typeof params.end === "number"
+      ) {
+        s = params.start;
+        e = params.end;
+      }
+      if (typeof s === "number" && typeof e === "number") {
+        zoomRef.current = { start: s, end: e };
+        setZoomState({ start: s, end: e });
+      }
+    };
+
+    chartInstance.current.on("datazoom", handleChartDataZoom);
+
+    // Native two-finger trackpad & horizontal mouse wheel smooth scrolling
+    const chartDom = chartRef.current;
+    let rafId = null;
+
+    const handleWheel = (e) => {
+      if (!data || data.length <= 8) return;
+
+      const isHorizontal =
+        Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey;
+      if (!isHorizontal) {
+        // Natural vertical scroll: do not preventDefault, let page scroll!
+        return;
+      }
+
+      e.preventDefault();
+
+      const rawDelta =
+        Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      let pixelDelta = rawDelta;
+      if (e.deltaMode === 1) pixelDelta *= 30;
+      else if (e.deltaMode === 2) pixelDelta *= 300;
+
+      const rect = chartDom.getBoundingClientRect();
+      const containerWidth = rect.width || 800;
+      const currentSpan = zoomRef.current.end - zoomRef.current.start;
+
+      // Direct 1:1 proportional scroll mapping
+      const deltaPercent = (pixelDelta / containerWidth) * currentSpan;
+
+      let newStart = zoomRef.current.start + deltaPercent;
+      let newEnd = zoomRef.current.end + deltaPercent;
+
+      if (newStart < 0) {
+        newStart = 0;
+        newEnd = currentSpan;
+      } else if (newEnd > 100) {
+        newEnd = 100;
+        newStart = 100 - currentSpan;
+      }
+
+      zoomRef.current = { start: newStart, end: newEnd };
+
+      if (chartInstance.current) {
+        chartInstance.current.dispatchAction({
+          type: "dataZoom",
+          dataZoomIndex: 0,
+          start: newStart,
+          end: newEnd,
+        });
+      }
+
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        setZoomState({ start: newStart, end: newEnd });
+      });
+    };
+
+    chartDom.addEventListener("wheel", handleWheel, { passive: false });
+
     const handleResize = () => {
       chartInstance.current?.resize();
     };
 
     window.addEventListener("resize", handleResize);
+
     return () => {
+      chartDom.removeEventListener("wheel", handleWheel);
+      if (rafId) cancelAnimationFrame(rafId);
+      if (chartInstance.current && !chartInstance.current.isDisposed()) {
+        chartInstance.current.off("datazoom", handleChartDataZoom);
+      }
       window.removeEventListener("resize", handleResize);
     };
   }, [data, selectedMetric, activeConfig, isSingleMetric, loading]);
@@ -381,7 +462,7 @@ export default function OverviewTrendChart({
         </button>
       </div>
 
-      {/* Chart Canvas or States */}
+      {/* Chart Canvas and Scrollbar */}
       {error ? (
         <div className="h-80 flex items-center justify-center text-sm text-rose-600 bg-rose-50/40 rounded-2xl border border-rose-100">
           {error}
@@ -391,9 +472,23 @@ export default function OverviewTrendChart({
           No historical trend data available.
         </div>
       ) : (
-        <div ref={chartRef} className="w-full h-80" />
+        <div className="w-full">
+          <div
+            ref={chartRef}
+            className={`w-full h-80 select-none ${data && data.length > 8 ? "cursor-grab active:cursor-grabbing" : ""}`}
+            style={{ touchAction: "pan-y" }}
+          />
+          <ChartScrollBar
+            start={zoomState.start}
+            end={zoomState.end}
+            dataLength={data.length}
+            visibleCount={8}
+            onChange={handleScrollBarChange}
+          />
+        </div>
       )}
     </div>
   );
 }
+
 

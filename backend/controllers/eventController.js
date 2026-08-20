@@ -10,15 +10,20 @@ async function handleSingleAppEvents(appName, req, res) {
       return res.status(404).json({ error: `App '${appName}' not found in configuration file.` });
     }
 
-    const { startDate, endDate } = req.query;
-    const result = await fetchAllAppEvents(appId, { startDate, endDate });
+    const { startDate, endDate, forceRefresh } = req.query;
+    const result = await fetchAllAppEvents(
+      appId,
+      { startDate, endDate },
+      forceRefresh === 'true' || forceRefresh === true
+    );
     res.json({
       success: true,
       data: result
     });
   } catch (error) {
     console.error(`Error fetching events for ${appName}:`, error.message);
-    res.status(500).json({
+    const statusCode = error.response?.status === 429 ? 429 : 500;
+    res.status(statusCode).json({
       success: false,
       error: error.message
     });

@@ -181,7 +181,13 @@ function App() {
               <Route path="/" element={<Navigate to="/overview" replace />} />
               <Route
                 path="/overview"
-                element={<Overview selectedApp={selectedApp} startDate={startDate} endDate={endDate} />}
+                element={
+                  <Overview
+                    selectedApp={selectedApp}
+                    startDate={startDate}
+                    endDate={endDate}
+                  />
+                }
               />
               <Route
                 path="/all_stores"
@@ -197,7 +203,10 @@ function App() {
                 }
               />
               <Route path="/analytics" element={<Analytics />} />
-              <Route path="/store/:domain" element={<Store_Details selectedApp={selectedApp} />} />
+              <Route
+                path="/store/:domain"
+                element={<Store_Details selectedApp={selectedApp} />}
+              />
             </Routes>
           </main>
         </div>
