@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, Users, TrendingUp, Settings, Store, LayoutGrid } from "lucide-react";
+import { Home, Users, Settings, Store, LayoutGrid } from "lucide-react";
 
 const Sidebar = () => {
   const location = useLocation();
@@ -19,11 +19,6 @@ const Sidebar = () => {
       text: "Merchants",
       icon: <Users className="w-4 h-4" />,
       path: "/all_stores",
-    },
-    {
-      text: "Analytics",
-      icon: <TrendingUp className="w-4 h-4" />,
-      path: "/analytics",
     },
   ];
 

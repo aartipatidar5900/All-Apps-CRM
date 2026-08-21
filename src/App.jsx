@@ -9,7 +9,6 @@ import {
 } from "react-router-dom";
 import All_Stores from "./pages/All_Stores";
 import Store_Details from "./pages/Store_Details";
-import Analytics from "./pages/Analytics";
 import Overview from "./pages/Overview";
 import Apps from "./pages/Apps";
 import Sidebar from "./components/Sidebar";
@@ -258,7 +257,6 @@ function App() {
                   />
                 }
               />
-              <Route path="/analytics" element={<Analytics />} />
               <Route
                 path="/settings"
                 element={

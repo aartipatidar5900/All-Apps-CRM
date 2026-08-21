@@ -19,7 +19,6 @@ import {
   ArrowDown,
 } from "lucide-react";
 import { StoreDetailsSkeleton } from "../components/SkeletonLoader";
-import { mockDiscounts } from "../data/mockData";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -27,13 +26,7 @@ const Store_Details = ({ selectedApp = "All Apps" }) => {
   const { domain } = useParams();
   const navigate = useNavigate();
 
-  const [storeData, setStoreData] = useState(() => {
-    return (
-      mockDiscounts.find(
-        (s) => s.storeDomain.toLowerCase() === (domain || "").toLowerCase(),
-      ) || null
-    );
-  });
+  const [storeData, setStoreData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -62,11 +55,7 @@ const Store_Details = ({ selectedApp = "All Apps" }) => {
           if (match) {
             setStoreData(match);
           } else {
-            const fallback = mockDiscounts.find(
-              (s) =>
-                s.storeDomain.toLowerCase() === (domain || "").toLowerCase(),
-            );
-            setStoreData((prev) => prev || fallback || null);
+            setStoreData((prev) => prev || null);
           }
         }
       } catch (err) {

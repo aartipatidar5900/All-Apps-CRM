@@ -112,11 +112,16 @@ const Main_Table = ({
     "storeName",
     "storeDomain",
     "apps",
+    "country",
     "contact",
+    "phoneNumber",
+    "onboarding",
     "mrr",
     "lifetime",
     "totalDays",
     "isActive",
+    "appPlan",
+    "storePlan",
     "plan",
     "createdOn",
     "updatedAt",
@@ -133,11 +138,16 @@ const Main_Table = ({
       storeName: "Store Name",
       storeDomain: "Shop Domain",
       apps: "Apps",
+      country: "Country",
       contact: "Contact",
+      phoneNumber: "Phone Number",
+      onboarding: "Onboarding",
       mrr: "MRR",
       lifetime: "Lifetime",
       totalDays: "Total Days",
       isActive: "Event",
+      appPlan: "App Plan",
+      storePlan: "Store Plan",
       plan: "Plan",
       createdOn: "Created On",
       updatedAt: "Updated On",
@@ -436,6 +446,23 @@ const Main_Table = ({
         },
       },
       {
+        id: "country",
+        accessorFn: (row) => row.country || null,
+        header: "Country",
+        enableSorting: true,
+        cell: ({ getValue }) => {
+          const country = getValue();
+          if (!country) {
+            return <span className="text-slate-300 font-normal text-xs">-</span>;
+          }
+          return (
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 uppercase whitespace-nowrap">
+              {country}
+            </span>
+          );
+        },
+      },
+      {
         id: "contact",
         accessorFn: (row) =>
           row.contactEmail ||
@@ -458,6 +485,73 @@ const Main_Table = ({
             >
               {email}
             </a>
+          );
+        },
+      },
+      {
+        id: "phoneNumber",
+        accessorFn: (row) => row.phoneNumber || row.phone || null,
+        header: "Phone Number",
+        enableSorting: true,
+        cell: ({ getValue }) => {
+          const phone = getValue();
+          if (!phone) {
+            return <span className="text-slate-300 font-normal text-xs">-</span>;
+          }
+          return (
+            <span className="font-medium text-slate-700 text-xs whitespace-nowrap">
+              {phone}
+            </span>
+          );
+        },
+      },
+      {
+        id: "onboarding",
+        accessorFn: (row) => {
+          if (row.onboardingStep) return row.onboardingStep;
+          if (Array.isArray(row.onboarding_completed_steps) && row.onboarding_completed_steps.length > 0) {
+            const raw = row.onboarding_completed_steps[row.onboarding_completed_steps.length - 1];
+            if (raw && typeof raw === "string") {
+              return raw
+                .replace(/[-_]/g, " ")
+                .replace(/\b\w/g, (char) => char.toUpperCase());
+            }
+          }
+          return null;
+        },
+        header: "Onboarding",
+        enableSorting: true,
+        cell: ({ getValue }) => {
+          const step = getValue();
+          if (!step) {
+            return (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                Incomplete
+              </span>
+            );
+          }
+          const isSuccess =
+            step.toLowerCase().includes("enable") ||
+            step.toLowerCase().includes("complete") ||
+            step.toLowerCase().includes("finish") ||
+            step.toLowerCase().includes("app-block");
+
+          return (
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap ${
+                isSuccess
+                  ? "bg-sky-50 text-sky-700 border-sky-200"
+                  : "bg-slate-100 text-slate-700 border-slate-200"
+              }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isSuccess ? "bg-sky-500" : "bg-slate-400"
+                }`}
+              />
+              {step}
+            </span>
           );
         },
       },
@@ -514,6 +608,40 @@ const Main_Table = ({
               className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold border whitespace-nowrap ${status.badgeClass}`}
             >
               {status.label}
+            </span>
+          );
+        },
+      },
+      {
+        id: "appPlan",
+        accessorFn: (row) => row.appPlan || null,
+        header: "App Plan",
+        enableSorting: true,
+        cell: ({ getValue }) => {
+          const plan = getValue();
+          if (!plan) {
+            return <span className="text-slate-300 font-normal text-xs">-</span>;
+          }
+          return (
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 capitalize whitespace-nowrap">
+              {plan}
+            </span>
+          );
+        },
+      },
+      {
+        id: "storePlan",
+        accessorFn: (row) => row.storePlan || null,
+        header: "Store Plan",
+        enableSorting: true,
+        cell: ({ getValue }) => {
+          const plan = getValue();
+          if (!plan) {
+            return <span className="text-slate-300 font-normal text-xs">-</span>;
+          }
+          return (
+            <span className="font-semibold text-slate-700 text-xs whitespace-nowrap">
+              {plan}
             </span>
           );
         },

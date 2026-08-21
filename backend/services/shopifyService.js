@@ -9,11 +9,24 @@ const CACHE_TTL_MS = 10 * 1000; // 10 seconds for fast real-time Partner API upd
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+let lastPartnerApiRequestTime = 0;
+const MIN_API_GAP_MS = 150;
+
+async function throttlePartnerApi() {
+  const now = Date.now();
+  const wait = Math.max(0, lastPartnerApiRequestTime + MIN_API_GAP_MS - now);
+  if (wait > 0) {
+    await sleep(wait);
+  }
+  lastPartnerApiRequestTime = Date.now();
+}
+
 /**
  * Robust GraphQL executor with exponential backoff for 429 (Rate Limit) and network errors
  */
 async function executePartnerGraphQLWithRetry(url, token, query, variables, maxRetries = 4) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    await throttlePartnerApi();
     try {
       const response = await axios({
         url,
@@ -83,7 +96,9 @@ async function fetchAllAppEvents(appApiKey, dateFilter = {}, forceRefresh = fals
   let after = null;
   let totalCount = 0;
   let allEvents = [];
-  let appName = '';
+  const appMeta = getAllApps().find(a => a.appId === appApiKey || a.name === appApiKey);
+  const fallbackAppName = appMeta ? appMeta.name : appApiKey;
+  let appName = fallbackAppName;
 
   const gidAppId = appApiKey.startsWith('gid://')
     ? appApiKey
@@ -116,8 +131,8 @@ async function fetchAllAppEvents(appApiKey, dateFilter = {}, forceRefresh = fals
       hasNextPage = eventsData.pageInfo.hasNextPage;
       if (edges.length > 0) {
         after = edges[edges.length - 1].cursor;
-        // Small 50ms pause between pagination requests to avoid burst rate limits
-        if (hasNextPage) await sleep(50);
+        // Pause 250ms between pagination requests to stay under Shopify 4 req/sec limit
+        if (hasNextPage) await sleep(250);
       } else {
         hasNextPage = false;
       }
@@ -627,8 +642,13 @@ function deriveStoreDetails(shop, domain, cleanName) {
   }
 
   const adminCache = getStoreDetailsCache();
+  const resolvedAppName = appName || fallbackAppName || 'Shopify App';
 
   storesList.forEach((store) => {
+    store.appName = store.appName || resolvedAppName;
+    store.apps = Array.isArray(store.apps) && store.apps.length > 0 ? store.apps : [resolvedAppName];
+    store.appsString = store.appsString || resolvedAppName;
+
     const domain = store.storeDomain || '';
     const events = store.pastEvents || [];
     const adminDetails = adminCache[domain] || adminCache[domain.replace('.myshopify.com', '')];
@@ -952,14 +972,16 @@ async function fetchAllAppsCombinedEvents(dateFilter = {}, forceRefresh = false)
   }
 
   const apps = getAllApps();
-  const appResults = await Promise.all(
-    apps.map((app) =>
-      fetchAllAppEvents(app.appId, dateFilter, forceRefresh).catch((err) => {
-        console.error(`Error fetching app ${app.name} (${app.appId}) for combined view:`, err.message);
-        return null;
-      })
-    )
-  );
+  const appResults = [];
+  for (const app of apps) {
+    try {
+      const res = await fetchAllAppEvents(app.appId, dateFilter, forceRefresh);
+      appResults.push(res);
+    } catch (err) {
+      console.error(`Error fetching app ${app.name} (${app.appId}) for combined view:`, err.message);
+      appResults.push(null);
+    }
+  }
 
   const validResults = appResults.filter(Boolean);
 

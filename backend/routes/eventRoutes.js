@@ -2,14 +2,6 @@ import express from 'express';
 import {
   getAppEventsByName,
   getAllAppsEvents,
-  getPassonextEvents,
-  getDiscountNinjaEvents,
-  getCheckoutExtensionsEvents,
-  getNojiroEvents,
-  getPostPurchaseEvents,
-  getCountryBlockerEvents,
-  getOrderEditingEvents,
-  getFormBuilderEvents,
 } from '../controllers/eventController.js';
 
 const router = express.Router();
@@ -18,18 +10,7 @@ const router = express.Router();
 router.get('/all-apps', getAllAppsEvents);
 router.get('/all', getAllAppsEvents);
 
-// Dedicated routes for each individual app in all_apps.json
-router.get('/passonext', getPassonextEvents);
-router.get('/discount-ninja', getDiscountNinjaEvents);
-router.get('/checkout-extensions', getCheckoutExtensionsEvents);
-router.get('/nojiro', getNojiroEvents);
-router.get('/post-purchase', getPostPurchaseEvents);
-router.get('/country-blocker', getCountryBlockerEvents);
-router.get('/order-editing', getOrderEditingEvents);
-router.get('/form-builder', getFormBuilderEvents);
-
-// Generic dynamic app route
+// Dynamic app route (matches any app name e.g. /passonext, /discount-ninja, etc.)
 router.get('/:appName', getAppEventsByName);
 
 export default router;
-

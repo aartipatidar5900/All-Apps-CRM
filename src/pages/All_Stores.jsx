@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from "react-router-dom";
 import Main_Table from "../components/Main_Table";
 import { TableSkeleton } from "../components/SkeletonLoader";
 import { AlertCircle } from "lucide-react";
-import { mockDiscounts } from "../data/mockData";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -479,7 +478,7 @@ const All_Stores = ({
               (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt),
             );
           } else {
-            storesList = mockDiscounts;
+            storesList = [];
           }
 
           setDiscounts(storesList);
@@ -493,10 +492,9 @@ const All_Stores = ({
         console.error(`Error fetching merchants for ${selectedApp}:`, err);
         if (isMounted) {
           setError(err.message);
-          // Fallback to mock data on network error so UI doesn't crash
-          setDiscounts(mockDiscounts);
+          setDiscounts([]);
           if (onTotalCountChange) {
-            onTotalCountChange(mockDiscounts.length);
+            onTotalCountChange(0);
           }
         }
       } finally {
