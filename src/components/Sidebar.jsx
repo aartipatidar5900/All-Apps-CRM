@@ -1,8 +1,7 @@
-import { useNavigate, useLocation } from "react-router-dom";
-import { Home, Users, TrendingUp, Settings, Store } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { Home, Users, TrendingUp, Settings, Store, LayoutGrid } from "lucide-react";
 
 const Sidebar = () => {
-  const navigate = useNavigate();
   const location = useLocation();
 
   const menuItems = [
@@ -10,6 +9,11 @@ const Sidebar = () => {
       text: "Overview",
       icon: <Home className="w-4 h-4" />,
       path: "/overview",
+    },
+    {
+      text: "Apps",
+      icon: <LayoutGrid className="w-4 h-4" />,
+      path: "/apps",
     },
     {
       text: "Merchants",
@@ -50,9 +54,8 @@ const Sidebar = () => {
 
               return (
                 <li key={item.text}>
-                  <button
-                    type="button"
-                    onClick={() => navigate(item.path)}
+                  <Link
+                    to={item.path}
                     className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-all duration-150 cursor-pointer ${
                       isActive
                         ? "bg-[#111827] text-white font-semibold shadow-xs"
@@ -67,7 +70,7 @@ const Sidebar = () => {
                       {item.icon}
                     </span>
                     <span className="truncate">{item.text}</span>
-                  </button>
+                  </Link>
                 </li>
               );
             })}
@@ -77,9 +80,8 @@ const Sidebar = () => {
 
       {/* Footer / Settings */}
       <div className="p-3 border-t border-slate-100">
-        <button
-          type="button"
-          onClick={() => navigate("/settings")}
+        <Link
+          to="/settings"
           className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-[13px] font-medium transition-colors cursor-pointer ${
             location.pathname === "/settings"
               ? "bg-[#111827] text-white font-semibold shadow-xs"
@@ -94,7 +96,7 @@ const Sidebar = () => {
             }`}
           />
           <span className="truncate">Settings</span>
-        </button>
+        </Link>
       </div>
     </aside>
   );

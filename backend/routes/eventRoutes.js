@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   getAppEventsByName,
+  getAllAppsEvents,
   getPassonextEvents,
   getDiscountNinjaEvents,
   getCheckoutExtensionsEvents,
@@ -12,6 +13,10 @@ import {
 } from '../controllers/eventController.js';
 
 const router = express.Router();
+
+// Dedicated route for All Apps combined data
+router.get('/all-apps', getAllAppsEvents);
+router.get('/all', getAllAppsEvents);
 
 // Dedicated routes for each individual app in all_apps.json
 router.get('/passonext', getPassonextEvents);

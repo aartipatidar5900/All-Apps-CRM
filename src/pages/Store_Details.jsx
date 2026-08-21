@@ -23,7 +23,7 @@ import { mockDiscounts } from "../data/mockData";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
-const Store_Details = ({ selectedApp = "Passonext" }) => {
+const Store_Details = ({ selectedApp = "All Apps" }) => {
   const { domain } = useParams();
   const navigate = useNavigate();
 

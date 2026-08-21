@@ -1,20 +1,34 @@
 import { getAppIdByName } from '../utils/appHelper.js';
-import { fetchAllAppEvents } from '../services/shopifyService.js';
+import { fetchAllAppEvents, fetchAllAppsCombinedEvents } from '../services/shopifyService.js';
+import { connectDB } from '../config/db.js';
 
-
-// Helper generator to handle single app requests
+// Helper generator to handle app requests (single or combined)
 async function handleSingleAppEvents(appName, req, res) {
   try {
+    // Dynamically connect database(s) based on selected app / All Apps
+    await connectDB(appName);
+
+    const { startDate, endDate, forceRefresh } = req.query;
+    const isForce = forceRefresh === 'true' || forceRefresh === true;
+    const norm = (appName || '').toLowerCase().replace(/[-_\s]/g, '');
+
+    if (norm === 'all' || norm === 'allapps') {
+      const result = await fetchAllAppsCombinedEvents({ startDate, endDate }, isForce);
+      return res.json({
+        success: true,
+        data: result,
+      });
+    }
+
     const appId = getAppIdByName(appName);
     if (!appId) {
       return res.status(404).json({ error: `App '${appName}' not found in configuration file.` });
     }
 
-    const { startDate, endDate, forceRefresh } = req.query;
     const result = await fetchAllAppEvents(
       appId,
       { startDate, endDate },
-      forceRefresh === 'true' || forceRefresh === true
+      isForce
     );
     res.json({
       success: true,
@@ -28,6 +42,11 @@ async function handleSingleAppEvents(appName, req, res) {
       error: error.message
     });
   }
+}
+
+// 0. All Apps Combined
+async function getAllAppsEvents(req, res) {
+  await handleSingleAppEvents('All Apps', req, res);
 }
 
 // 1. Passonext
@@ -78,6 +97,7 @@ async function getAppEventsByName(req, res) {
 
 export {
   getAppEventsByName,
+  getAllAppsEvents,
   getPassonextEvents,
   getDiscountNinjaEvents,
   getCheckoutExtensionsEvents,
@@ -87,4 +107,5 @@ export {
   getOrderEditingEvents,
   getFormBuilderEvents,
 };
+
 

@@ -111,6 +111,10 @@ const Main_Table = ({
     "selection",
     "storeName",
     "storeDomain",
+    "apps",
+    "contact",
+    "mrr",
+    "lifetime",
     "totalDays",
     "isActive",
     "plan",
@@ -128,6 +132,10 @@ const Main_Table = ({
     const labels = {
       storeName: "Store Name",
       storeDomain: "Shop Domain",
+      apps: "Apps",
+      contact: "Contact",
+      mrr: "MRR",
+      lifetime: "Lifetime",
       totalDays: "Total Days",
       isActive: "Event",
       plan: "Plan",
@@ -373,7 +381,7 @@ const Main_Table = ({
         cell: ({ getValue }) => {
           const name = getValue() || "N/A";
           return (
-            <span className="font-semibold text-slate-900 text-sm whitespace-nowrap">
+            <span className="font-semibold text-slate-900 text-xs whitespace-nowrap">
               {name}
             </span>
           );
@@ -391,11 +399,93 @@ const Main_Table = ({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1.5 font-medium text-slate-700 hover:text-indigo-600 transition-colors text-sm group whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 font-medium text-slate-700 hover:text-indigo-600 transition-colors text-xs group whitespace-nowrap"
             >
               <span>{domain}</span>
               <ExternalLink className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100 transition-opacity" />
             </a>
+          );
+        },
+      },
+      {
+        id: "apps",
+        accessorFn: (row) => row.appsString || row.appName || "App",
+        header: "Apps",
+        enableSorting: true,
+        cell: ({ row }) => {
+          const appsList = Array.isArray(row.original.apps) && row.original.apps.length > 0
+            ? row.original.apps
+            : [row.original.appsString || row.original.appName || "App"];
+
+          const appChunks = [];
+          for (let i = 0; i < appsList.length; i += 2) {
+            const isLastChunk = i + 2 >= appsList.length;
+            const chunkStr = appsList.slice(i, i + 2).join(", ");
+            appChunks.push(isLastChunk ? chunkStr : `${chunkStr},`);
+          }
+
+          return (
+            <div className="flex flex-col text-slate-700 font-medium text-xs py-0.5 leading-snug">
+              {appChunks.map((lineText, idx) => (
+                <span key={idx} className="whitespace-nowrap">
+                  {lineText}
+                </span>
+              ))}
+            </div>
+          );
+        },
+      },
+      {
+        id: "contact",
+        accessorFn: (row) =>
+          row.contactEmail ||
+          row.ownerEmail ||
+          row.storeEmail ||
+          row.email ||
+          null,
+        header: "Contact",
+        enableSorting: true,
+        cell: ({ getValue }) => {
+          const email = getValue();
+          if (!email) {
+            return <span className="text-slate-300 font-normal text-xs">-</span>;
+          }
+          return (
+            <a
+              href={`mailto:${email}`}
+              onClick={(e) => e.stopPropagation()}
+              className="font-medium text-slate-700 hover:text-indigo-600 transition-colors text-xs whitespace-nowrap"
+            >
+              {email}
+            </a>
+          );
+        },
+      },
+      {
+        id: "mrr",
+        accessorFn: (row) => row.mrr || 0,
+        header: "MRR",
+        enableSorting: true,
+        cell: ({ getValue }) => {
+          const val = getValue() || 0;
+          return (
+            <span className="font-semibold text-slate-900 text-xs whitespace-nowrap">
+              {val > 0 ? `$${val.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : <span className="text-slate-300 font-normal">-</span>}
+            </span>
+          );
+        },
+      },
+      {
+        id: "lifetime",
+        accessorFn: (row) => row.lifetime || 0,
+        header: "Lifetime",
+        enableSorting: true,
+        cell: ({ getValue }) => {
+          const val = getValue() || 0;
+          return (
+            <span className="font-semibold text-slate-900 text-xs whitespace-nowrap">
+              {val > 0 ? `$${val.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : <span className="text-slate-300 font-normal">$0</span>}
+            </span>
           );
         },
       },
@@ -407,7 +497,7 @@ const Main_Table = ({
         cell: ({ getValue }) => {
           const days = getValue();
           return (
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 whitespace-nowrap shadow-2xs">
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 whitespace-nowrap shadow-2xs">
               {days} {days === 1 ? "day" : "days"}
             </span>
           );
@@ -436,7 +526,7 @@ const Main_Table = ({
           const val = getValue() || "N/A";
           if (val === "Trial") {
             return (
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border bg-orange-100/70 text-orange-700 border-orange-200 uppercase tracking-wider whitespace-nowrap">
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border bg-orange-100/70 text-orange-700 border-orange-200 uppercase tracking-wider whitespace-nowrap">
                 TRIAL
               </span>
             );
@@ -445,17 +535,17 @@ const Main_Table = ({
             const cleanPlan = val.replace(" Trial", "");
             return (
               <div className="flex items-center gap-1.5 whitespace-nowrap">
-                <span className="font-semibold text-slate-700 font-sans text-sm">
+                <span className="font-semibold text-slate-700 text-xs">
                   {cleanPlan}
                 </span>
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border bg-orange-100/70 text-orange-700 border-orange-200 uppercase tracking-wider">
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold border bg-orange-100/70 text-orange-700 border-orange-200 uppercase tracking-wider">
                   TRIAL
                 </span>
               </div>
             );
           }
           return (
-            <span className="font-semibold text-slate-700 font-sans text-sm whitespace-nowrap">
+            <span className="font-semibold text-slate-700 text-xs whitespace-nowrap">
               {val}
             </span>
           );

@@ -11,6 +11,7 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 import eventRoutes from './routes/eventRoutes.js';
+// import { connectDB } from './config/db.js';
 
 const app = express();
 app.use(cors());
@@ -21,6 +22,8 @@ const PORT = process.env.PORT || 5000;
 // Mount API routes
 app.use('/api/events', eventRoutes);
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
+  // Initial DB connection check for All Apps
+  // await connectDB('All Apps');
 });

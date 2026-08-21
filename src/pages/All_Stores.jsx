@@ -52,7 +52,7 @@ const getStatusLabel = (row) => {
 };
 
 const All_Stores = ({
-  selectedApp = "Passonext",
+  selectedApp = "All Apps",
   onTotalCountChange,
   datePreset: propDatePreset = "all",
   startDate: propStartDate = "",
@@ -182,6 +182,8 @@ const All_Stores = ({
           (item.storeName || "").toLowerCase().includes(query) ||
           (item.name || "").toLowerCase().includes(query) ||
           (item.storeDomain || "").toLowerCase().includes(query) ||
+          (item.ownerEmail || item.contactEmail || item.storeEmail || "").toLowerCase().includes(query) ||
+          (item.appsString || item.appName || "").toLowerCase().includes(query) ||
           (item.plan || "").toLowerCase().includes(query),
       );
     }
@@ -290,7 +292,19 @@ const All_Stores = ({
       result.sort((a, b) => {
         let valA, valB;
 
-        if (sortField === "totalDays") {
+        if (sortField === "mrr") {
+          valA = typeof a.mrr === "number" ? a.mrr : 0;
+          valB = typeof b.mrr === "number" ? b.mrr : 0;
+        } else if (sortField === "lifetime") {
+          valA = typeof a.lifetime === "number" ? a.lifetime : 0;
+          valB = typeof b.lifetime === "number" ? b.lifetime : 0;
+        } else if (sortField === "apps") {
+          valA = (a.appsString || a.appName || "").toLowerCase();
+          valB = (b.appsString || b.appName || "").toLowerCase();
+        } else if (sortField === "contact") {
+          valA = (a.ownerEmail || a.contactEmail || a.storeEmail || "").toLowerCase();
+          valB = (b.ownerEmail || b.contactEmail || b.storeEmail || "").toLowerCase();
+        } else if (sortField === "totalDays") {
           valA = getTotalDays(a);
           valB = getTotalDays(b);
         } else if (sortField === "isActive" || sortField === "status") {
@@ -343,10 +357,18 @@ const All_Stores = ({
     sortOrder,
   ]);
 
+  const maxPage = Math.max(1, Math.ceil(filteredAndSortedDiscounts.length / limit));
+
+  // Auto-clamp page directly during render if current page exceeds maximum available pages
+  if (page > maxPage) {
+    setPage(1);
+  }
+
   const paginatedDiscounts = useMemo(() => {
-    const startIndex = (page - 1) * limit;
+    const currentPage = page > maxPage ? 1 : page;
+    const startIndex = (currentPage - 1) * limit;
     return filteredAndSortedDiscounts.slice(startIndex, startIndex + limit);
-  }, [filteredAndSortedDiscounts, page, limit]);
+  }, [filteredAndSortedDiscounts, page, maxPage, limit]);
 
   useEffect(() => {
     let isMounted = true;
@@ -355,12 +377,14 @@ const All_Stores = ({
       setLoading(true);
       setDiscounts([]);
       setError("");
+      setPage(1);
       try {
+        const targetApp = selectedApp || "All Apps";
         const params = new URLSearchParams();
         if (startDate) params.append("startDate", startDate);
         if (endDate) params.append("endDate", endDate);
         const queryString = params.toString();
-        const url = `${API_BASE_URL}/api/events/${encodeURIComponent(selectedApp)}${queryString ? `?${queryString}` : ""}`;
+        const url = `${API_BASE_URL}/api/events/${encodeURIComponent(targetApp)}${queryString ? `?${queryString}` : ""}`;
 
         const response = await fetch(url);
         if (!response.ok) {

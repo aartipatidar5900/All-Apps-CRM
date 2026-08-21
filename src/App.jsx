@@ -11,19 +11,23 @@ import All_Stores from "./pages/All_Stores";
 import Store_Details from "./pages/Store_Details";
 import Analytics from "./pages/Analytics";
 import Overview from "./pages/Overview";
+import Apps from "./pages/Apps";
 import Sidebar from "./components/Sidebar";
 import DateFilter from "./components/DateFilter";
 import AppDropdown from "./components/app_dropdown";
-import { ArrowLeft, Copy, Check } from "lucide-react";
+import { ArrowLeft, Copy, Check, RefreshCw } from "lucide-react";
+import { formatAppName, getAppsList } from "./utils/formatters";
 
 function NavigationBar({
   totalCount = 0,
-  selectedApp = "Passonext",
+  selectedApp = "All Apps",
   onSelectApp,
   datePreset = "all",
   startDate = "",
   endDate = "",
   onDateFilterChange,
+  onForceResync,
+  isRefreshing = false,
 }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -45,6 +49,9 @@ function NavigationBar({
   const getPageTitle = () => {
     if (location.pathname === "/" || location.pathname === "/overview")
       return "Overview";
+    if (location.pathname === "/apps") {
+      return selectedApp ? formatAppName(selectedApp) : "Apps";
+    }
     if (location.pathname === "/all_stores") return "Merchants";
     if (location.pathname === "/analytics") return "Analytics";
     if (location.pathname === "/promotions") return "Promotions";
@@ -55,6 +62,11 @@ function NavigationBar({
 
   const isMerchantsPage =
     location.pathname === "/all_stores" || location.pathname === "/";
+  const isAppsPage = location.pathname === "/apps";
+
+  const appsList = getAppsList();
+  const currentAppObj = appsList.find((a) => a.name === selectedApp) || appsList[0];
+  const partnerGid = currentAppObj?.gid || `gid://partners/App/${selectedApp}`;
 
   return (
     <header className="sticky top-0 z-30 w-full bg-white/95 backdrop-blur-md border-b border-slate-200">
@@ -98,6 +110,11 @@ function NavigationBar({
               <h1 className="font-bold text-slate-900 text-xl tracking-tight">
                 {getPageTitle()}
               </h1>
+              {isAppsPage && partnerGid && partnerGid !== "gid://partners/App/all-apps" && (
+                <p className="text-xs font-mono text-slate-400 mt-0.5">
+                  {partnerGid}
+                </p>
+              )}
               {isMerchantsPage && (
                 <span className="text-xs font-medium text-slate-500 block mt-0.5">
                   Total stores: {totalCount}
@@ -127,6 +144,23 @@ function NavigationBar({
                 selectedApp={selectedApp}
                 onSelectApp={onSelectApp}
               />
+
+              {isAppsPage && (
+                <button
+                  type="button"
+                  onClick={onForceResync}
+                  disabled={isRefreshing}
+                  className="px-3 py-2 bg-slate-900 text-white hover:bg-slate-800 font-semibold text-xs rounded-xl transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
+                  title="Force Resync App Data"
+                >
+                  <RefreshCw
+                    className={`w-3.5 h-3.5 ${
+                      isRefreshing ? "animate-spin" : ""
+                    }`}
+                  />
+                  <span>Force resync</span>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -138,11 +172,14 @@ function NavigationBar({
 function App() {
   const [totalStoresCount, setTotalStoresCount] = useState(0);
   const [selectedApp, setSelectedApp] = useState(() => {
-    return localStorage.getItem("selected_crm_app") || "Passonext";
+    return localStorage.getItem("selected_crm_app") || "All Apps";
   });
   const [datePreset, setDatePreset] = useState("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+
+  const [forceResyncTrigger, setForceResyncTrigger] = useState(0);
+  const [isAppsRefreshing, setIsAppsRefreshing] = useState(false);
 
   const handleSelectApp = (app) => {
     setSelectedApp(app);
@@ -162,6 +199,10 @@ function App() {
     setEndDate(end || "");
   };
 
+  const handleTriggerResync = () => {
+    setForceResyncTrigger((prev) => prev + 1);
+  };
+
   return (
     <Router>
       <div className="flex min-h-screen bg-slate-50 text-slate-900 font-sans">
@@ -175,6 +216,8 @@ function App() {
             startDate={startDate}
             endDate={endDate}
             onDateFilterChange={handleDateFilterChange}
+            onForceResync={handleTriggerResync}
+            isRefreshing={isAppsRefreshing}
           />
           <main className="flex-1">
             <Routes>
@@ -186,6 +229,19 @@ function App() {
                     selectedApp={selectedApp}
                     startDate={startDate}
                     endDate={endDate}
+                  />
+                }
+              />
+              <Route
+                path="/apps"
+                element={
+                  <Apps
+                    selectedApp={selectedApp}
+                    onSelectApp={handleSelectApp}
+                    startDate={startDate}
+                    endDate={endDate}
+                    forceResyncTrigger={forceResyncTrigger}
+                    onRefreshingChange={setIsAppsRefreshing}
                   />
                 }
               />
@@ -204,9 +260,21 @@ function App() {
               />
               <Route path="/analytics" element={<Analytics />} />
               <Route
+                path="/settings"
+                element={
+                  <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-4">
+                    <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
+                    <p className="text-sm text-slate-500">
+                      Manage your Shopify Partner API tokens, organization IDs, and app synchronization settings.
+                    </p>
+                  </div>
+                }
+              />
+              <Route
                 path="/store/:domain"
                 element={<Store_Details selectedApp={selectedApp} />}
               />
+              <Route path="*" element={<Navigate to="/overview" replace />} />
             </Routes>
           </main>
         </div>
