@@ -11,8 +11,7 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 import eventRoutes from './routes/eventRoutes.js';
-// import { connectDB } from './config/db.js';
-import { fetchAllAppsCombinedEvents } from './services/shopifyService.js';
+import { clearEventsCache, fetchAllAppsCombinedEvents } from './services/shopifyService.js';
 
 const app = express();
 app.use(cors());
@@ -25,10 +24,10 @@ app.use('/api/events', eventRoutes);
 
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
-  // await connectDB('All Apps');
   try {
+    clearEventsCache();
     console.log(`[Startup] Fetching All Apps Shopify Partner API events...`);
-    await fetchAllAppsCombinedEvents({}, false);
+    await fetchAllAppsCombinedEvents({}, true);
   } catch (err) {
     console.error(`[Startup Partner API Fetch Error] ${err.message}`);
   }

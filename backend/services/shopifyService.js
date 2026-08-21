@@ -470,6 +470,7 @@ function deriveStoreDetails(shop, domain, cleanName) {
     'countryblockermt': 7,
     'ordereditingmt': 7,
     'formbuildermt': 7,
+    'custlo': 14,
     // Fallback Names (Normalized)
     'discountninja': 14,
     'postpurchase': 0,
@@ -485,6 +486,7 @@ function deriveStoreDetails(shop, domain, cleanName) {
     '374494232577': 7, // Country_Blocker
     '345764200449': 7, // Order_editing
     '377463177217': 7, // Form_Builder
+    '16768925697': 14, // Custlo
   };
 
   function getStorePlanFromEvents(events, appKey) {
@@ -950,7 +952,38 @@ function deriveStoreDetails(shop, domain, cleanName) {
   console.log(` Total Deactivated (Closed)    : ${eventCounts.RELATIONSHIP_DEACTIVATED || 0}`);
   console.log(` Active Paid Charges           : ${activatedCharges}`);
   console.log(` Total Monthly Revenue (MRR)   : ${realFormattedRevenue}`);
-  console.log(`==================================================`);
+
+  const activePaidMerchantsList = storesList.filter(
+    (s) =>
+      s.isActive &&
+      s.plan &&
+      !s.plan.toLowerCase().includes('free') &&
+      !s.plan.toLowerCase().includes('trial') &&
+      !s.plan.toLowerCase().includes('no plan')
+  );
+  if (activePaidMerchantsList.length > 0) {
+    console.log(`--------------------------------------------------`);
+    console.log(`[Active Paid Merchants List for ${appName || appApiKey} (${activePaidMerchantsList.length} stores)]:`);
+    console.log(
+      activePaidMerchantsList.map((s) => ({
+        storeName: s.storeName,
+        storeDomain: s.storeDomain,
+        plan: s.plan,
+        mrr: s.mrr,
+        email: s.ownerEmail || s.contactEmail || s.email,
+        createdOn: s.createdOn || s.createdAt,
+      }))
+    );
+  }
+  const isCustlo = (appName || appApiKey || '').toLowerCase().includes('custlo') || String(appApiKey) === '16768925697';
+  if (isCustlo) {
+    console.log(`==================================================`);
+    console.log(`[CUSTLO APP METRICS]`);
+    console.log(`--------------------------------------------------`);
+    console.log(` Custlo Active Install Count : ${activeMerchantsCount}`);
+    console.log(` Custlo Paid Install Count   : ${paidUniqueShopsCount}`);
+    console.log(`==================================================`);
+  }
 
   appEventsCache.set(cacheKey, { timestamp: Date.now(), data: result });
 
@@ -1213,6 +1246,39 @@ async function fetchAllAppsCombinedEvents(dateFilter = {}, forceRefresh = false)
     monthlyTrends,
     events: combinedEvents,
   };
+
+  const activePaidCombinedStores = combinedStores.filter(
+    (s) =>
+      s.isActive &&
+      s.plan &&
+      !s.plan.toLowerCase().includes('free') &&
+      !s.plan.toLowerCase().includes('trial') &&
+      !s.plan.toLowerCase().includes('no plan')
+  );
+
+  console.log(`==================================================`);
+  console.log(`[All Apps Combined Events Summary]`);
+  console.log(`--------------------------------------------------`);
+  console.log(` Total Combined Events        : ${combinedEvents.length}`);
+  console.log(` Total Combined Stores        : ${combinedStores.length}`);
+  console.log(` Active Stores                : ${activeStoresNum}`);
+  console.log(` Active Paid Stores           : ${activePaidCombinedStores.length}`);
+  console.log(` Total Monthly Revenue (MRR)   : ${realFormattedRevenue}`);
+  if (activePaidCombinedStores.length > 0) {
+    console.log(`--------------------------------------------------`);
+    console.log(`[All Apps Combined View - Active Paid Merchants List (${activePaidCombinedStores.length} stores)]:`);
+    console.log(
+      activePaidCombinedStores.map((s) => ({
+        storeName: s.storeName,
+        storeDomain: s.storeDomain,
+        apps: s.appsString || s.apps,
+        plan: s.plan,
+        mrr: s.mrr,
+        email: s.ownerEmail || s.contactEmail || s.email,
+      }))
+    );
+  }
+  console.log(`==================================================`);
 
   appEventsCache.set(cacheKey, { timestamp: Date.now(), data: combinedResult });
 
